@@ -166,11 +166,16 @@ module ibex_cs_registers import ibex_pkg::*; #(
     | (32'(CSR_MISA_MXL) << 30); // M-XLEN
 
   typedef struct packed {
+    logic      sie;
     logic      mie;
+    logic      spie;
     logic      mpie;
+    logic      spp;
     priv_lvl_e mpp;
     logic      mprv;
+    logic      sum;
     logic      tw;
+    logic      tsr;
   } status_t;
 
   typedef struct packed {
@@ -545,6 +550,13 @@ module ibex_cs_registers import ibex_pkg::*; #(
       CSR_SECURESEED: begin
         csr_rdata_int = '0;
       end
+      
+      CSR_SSTATUS: begin
+        csr_rdata_int                                                   = '0;
+        if (priv_lvl_q == PRIV_LVL_S) begin
+          csr_rdata_int = 'h55;
+        end;
+      end
 
       default: begin
         illegal_csr = 1'b1;
@@ -612,14 +624,19 @@ module ibex_cs_registers import ibex_pkg::*; #(
         CSR_MSTATUS: begin
           mstatus_en = 1'b1;
           mstatus_d    = '{
+              sie:  csr_wdata_int[CSR_MSTATUS_SIE_BIT],
               mie:  csr_wdata_int[CSR_MSTATUS_MIE_BIT],
+              spie: csr_wdata_int[CSR_MSTATUS_SPIE_BIT],
               mpie: csr_wdata_int[CSR_MSTATUS_MPIE_BIT],
+              spp:  csr_wdata_int[CSR_MSTATUS_SPP_BIT],
               mpp:  priv_lvl_e'(csr_wdata_int[CSR_MSTATUS_MPP_BIT_HIGH:CSR_MSTATUS_MPP_BIT_LOW]),
               mprv: csr_wdata_int[CSR_MSTATUS_MPRV_BIT],
-              tw:   csr_wdata_int[CSR_MSTATUS_TW_BIT]
+              sum:  csr_wdata_int[CSR_MSTATUS_SUM_BIT],
+              tw:   csr_wdata_int[CSR_MSTATUS_TW_BIT],
+              tsr:  csr_wdata_int[CSR_MSTATUS_TSR_BIT]
           };
           // Convert illegal values to U-mode
-          if ((mstatus_d.mpp != PRIV_LVL_M) && (mstatus_d.mpp != PRIV_LVL_U)) begin
+          if ((mstatus_d.mpp != PRIV_LVL_M) && (mstatus_d.mpp != PRIV_LVL_S) && (mstatus_d.mpp != PRIV_LVL_U)) begin
             mstatus_d.mpp = PRIV_LVL_U;
           end
         end
@@ -862,11 +879,16 @@ module ibex_cs_registers import ibex_pkg::*; #(
   ////////////////////////
 
   // MSTATUS
-  localparam status_t MSTATUS_RST_VAL = '{mie:  1'b0,
+  localparam status_t MSTATUS_RST_VAL = '{sie:  1'b0,
+                                          mie:  1'b0,
+                                          spie: 1'b0,
                                           mpie: 1'b1,
+                                          spp:  1'b0,
                                           mpp:  PRIV_LVL_U,
                                           mprv: 1'b0,
-                                          tw:   1'b0};
+                                          sum:  1'b0,
+                                          tw:   1'b0,
+                                          tsr:  1'b0};
   ibex_csr #(
     .Width     ($bits(status_t)),
     .ShadowCopy(ShadowCSR),

@@ -451,6 +451,12 @@ package ibex_pkg;
     CSR_MHARTID    = 12'hF14,
     CSR_MCONFIGPTR = 12'hF15,
 
+    // Supervisor trap setup
+    CSR_SSTATUS        = 12'h100,
+    CSR_SIE            = 12'h104,
+    CSR_STVEC          = 12'h105,
+    CSR_SCOUNTEREN     = 12'h106,
+
     // Machine trap setup
     CSR_MSTATUS   = 12'h300,
     CSR_MISA      = 12'h301,
@@ -615,12 +621,17 @@ package ibex_pkg;
   parameter logic [11:0] CSR_OFF_PMP_ADDR = 12'h3B0; // pmp_addr @ 12'h3b0 - 12'h3bf
 
   // CSR status bits
+  parameter int unsigned CSR_MSTATUS_SIE_BIT      = 1;
   parameter int unsigned CSR_MSTATUS_MIE_BIT      = 3;
+  parameter int unsigned CSR_MSTATUS_SPIE_BIT     = 5;
   parameter int unsigned CSR_MSTATUS_MPIE_BIT     = 7;
+  parameter int unsigned CSR_MSTATUS_SPP_BIT      = 8;
   parameter int unsigned CSR_MSTATUS_MPP_BIT_LOW  = 11;
   parameter int unsigned CSR_MSTATUS_MPP_BIT_HIGH = 12;
   parameter int unsigned CSR_MSTATUS_MPRV_BIT     = 17;
+  parameter int unsigned CSR_MSTATUS_SUM_BIT      = 18;
   parameter int unsigned CSR_MSTATUS_TW_BIT       = 21;
+  parameter int unsigned CSR_MSTATUS_TSR_BIT      = 22;
 
   // CSR machine ISA
   parameter logic [1:0] CSR_MISA_MXL = 2'd1; // M-XLEN: XLEN in M-Mode for RV32
