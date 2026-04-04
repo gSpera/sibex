@@ -352,11 +352,16 @@ module ibex_cs_registers import ibex_pkg::*; #(
       // mstatus: always M-mode, contains IE bit
       CSR_MSTATUS: begin
         csr_rdata_int                                                   = '0;
+        csr_rdata_int[CSR_MSTATUS_SIE_BIT]                              = mstatus_q.sie;
         csr_rdata_int[CSR_MSTATUS_MIE_BIT]                              = mstatus_q.mie;
+        csr_rdata_int[CSR_MSTATUS_SPIE_BIT]                             = mstatus_q.spie;
         csr_rdata_int[CSR_MSTATUS_MPIE_BIT]                             = mstatus_q.mpie;
+        csr_rdata_int[CSR_MSTATUS_SPP_BIT]                              = mstatus_q.spp;
         csr_rdata_int[CSR_MSTATUS_MPP_BIT_HIGH:CSR_MSTATUS_MPP_BIT_LOW] = mstatus_q.mpp;
         csr_rdata_int[CSR_MSTATUS_MPRV_BIT]                             = mstatus_q.mprv;
+        csr_rdata_int[CSR_MSTATUS_SUM_BIT]                              = mstatus_q.sum;
         csr_rdata_int[CSR_MSTATUS_TW_BIT]                               = mstatus_q.tw;
+        csr_rdata_int[CSR_MSTATUS_TSR_BIT]                              = mstatus_q.tsr;
       end
 
       // mstatush: All zeros for Ibex (fixed little endian and all other bits reserved)
@@ -552,11 +557,16 @@ module ibex_cs_registers import ibex_pkg::*; #(
       end
       
       CSR_SSTATUS: begin
-        csr_rdata_int                                                   = '0;
-        if (priv_lvl_q == PRIV_LVL_S) begin
-          csr_rdata_int = 'h55;
-        end;
+        csr_rdata_int                        = '0;
+        csr_rdata_int[CSR_MSTATUS_SIE_BIT]   = mstatus_q.sie;
+        csr_rdata_int[CSR_MSTATUS_SPIE_BIT]  = mstatus_q.spie;
+        csr_rdata_int[CSR_MSTATUS_SPP_BIT]   = mstatus_q.spp;
+        csr_rdata_int[CSR_MSTATUS_SUM_BIT]   = mstatus_q.sum;
+        csr_rdata_int[CSR_MSTATUS_TW_BIT]    = mstatus_q.tw;
+        csr_rdata_int[CSR_MSTATUS_TSR_BIT]   = mstatus_q.tsr;
       end
+      
+      CSR_SSTATUSH: csr_rdata_int = '0;
 
       default: begin
         illegal_csr = 1'b1;
@@ -640,7 +650,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
             mstatus_d.mpp = PRIV_LVL_U;
           end
         end
-
+        
         // interrupt enable
         CSR_MIE: mie_en = 1'b1;
 
@@ -725,6 +735,22 @@ module ibex_cs_registers import ibex_pkg::*; #(
           cpuctrlsts_part_we = 1'b1;
         end
 
+        CSR_SSTATUS: begin
+          mstatus_en = 1'b1;
+          mstatus_d    = '{
+              sie:  csr_wdata_int[CSR_MSTATUS_SIE_BIT],
+              mie:  mstatus_q.mie,
+              spie: csr_wdata_int[CSR_MSTATUS_SPIE_BIT],
+              mpie: mstatus_q.mpie,
+              spp:  csr_wdata_int[CSR_MSTATUS_SPP_BIT],
+              mpp:  priv_lvl_e'(mstatus_q.mpp),
+              mprv: mstatus_q.mprv,
+              sum:  csr_wdata_int[CSR_MSTATUS_SUM_BIT],
+              tw:   mstatus_q.tw,
+              tsr:  mstatus_q.tsr
+          };
+        end
+
         default:;
       endcase
     end
@@ -796,6 +822,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
         priv_lvl_d     = mstatus_q.mpp;
         mstatus_en     = 1'b1;
         mstatus_d.mie  = mstatus_q.mpie; // re-enable interrupts
+        // mstatus_d.sum   = 1'b1;
 
         if (mstatus_q.mpp != PRIV_LVL_M) begin
           mstatus_d.mprv = 1'b0;

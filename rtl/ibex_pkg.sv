@@ -453,6 +453,7 @@ package ibex_pkg;
 
     // Supervisor trap setup
     CSR_SSTATUS        = 12'h100,
+    CSR_SSTATUSH       = 12'h101,
     CSR_SIE            = 12'h104,
     CSR_STVEC          = 12'h105,
     CSR_SCOUNTEREN     = 12'h106,
