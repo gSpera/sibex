@@ -1083,6 +1083,9 @@ module ibex_core import ibex_pkg::*; #(
     .csr_mtvec_o     (csr_mtvec),
     .csr_mtvec_init_i(csr_mtvec_init),
     .boot_addr_i     (boot_addr_i),
+    
+    // stvec
+    .csr_stvec_o (),
 
     // Interface to CSRs     ( SRAM like                    )
     .csr_access_i(csr_access),

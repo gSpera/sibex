@@ -125,7 +125,12 @@ module ibex_cs_registers import ibex_pkg::*; #(
   input  logic                 mem_store_i,                 // store to memory in this cycle
   input  logic                 dside_wait_i,                // core waiting for the dside
   input  logic                 mul_wait_i,                  // core waiting for multiply
-  input  logic                 div_wait_i                   // core waiting for divide
+  input  logic                 div_wait_i,                   // core waiting for divide
+  
+  // Supervisor
+
+  // stvec
+  output logic [31:0]          csr_stvec_o
 );
 
   // Is a PMP config a locked one that allows M-mode execution when MSECCFG.MML is set (either
@@ -243,6 +248,10 @@ module ibex_cs_registers import ibex_pkg::*; #(
   logic [31:0] dscratch0_q;
   logic [31:0] dscratch1_q;
   logic        dscratch0_en, dscratch1_en;
+  // Supervisor
+  // TODO: Mode in STVEC is WARL
+  logic [31:0] stvec_q;
+  logic        stvec_en;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -567,6 +576,10 @@ module ibex_cs_registers import ibex_pkg::*; #(
       end
       
       CSR_SSTATUSH: csr_rdata_int = '0;
+      
+      // TODO: stvec, sip, sie, scounteren, sscratch, sepc, scause, stval, senvcfg, satp, stimecmp
+      // stvec: trap-vector base address
+      CSR_STVEC: csr_rdata_int = stvec_q;
 
       default: begin
         illegal_csr = 1'b1;
@@ -750,6 +763,9 @@ module ibex_cs_registers import ibex_pkg::*; #(
               tsr:  mstatus_q.tsr
           };
         end
+        
+        // Supervisor
+        CSR_STVEC: stvec_en = 1'b1;
 
         default:;
       endcase
@@ -889,6 +905,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
   assign csr_depc_o  = depc_q;
   assign csr_mtvec_o = mtvec_q;
   assign csr_mtval_o = mtval_q;
+
+  assign csr_stvec_o = stvec_q;
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
@@ -1121,6 +1139,21 @@ module ibex_cs_registers import ibex_pkg::*; #(
     .rd_data_o (mstack_cause_q),
     .rd_error_o()
   );
+
+  // STVEC
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(ShadowCSR),
+    .ResetValue(32'd0)
+  ) u_stvec_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (stvec_en),
+    .rd_data_o (stvec_q),
+    .rd_error_o()
+  );
+
 
   // -----------------
   // PMP registers
