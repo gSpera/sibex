@@ -457,10 +457,39 @@ package ibex_pkg;
     CSR_SIE            = 12'h104,
     CSR_STVEC          = 12'h105,
     CSR_SCOUNTEREN     = 12'h106,
+    
+    // Supervisor configuration
+    CSR_SENVCFG        = 12'h10A,
+
+    // Supervisor trap handling
+    CSR_SSCRATCH       = 12'h140,
+    CSR_SEPC           = 12'h141,
+    CSR_SCAUSE         = 12'h142,
+    CSR_STVAL          = 12'h143,
+    CSR_SIP            = 12'h144,
+    CSR_COUNTOVF       = 12'hDA0,
+    
+    // Supervisor indirect
+    CSR_SISELECT       = 12'h150,
+    CSR_SIREG          = 12'h151,
+    CSR_SIREG2         = 12'h152,
+    CSR_SIREG3         = 12'h153,
+    CSR_SIREG4         = 12'h154,
+    CSR_SIREG5         = 12'h155,
+    CSR_SIREG6         = 12'h156,
+    
+   // Supervisor protection and translation
+   CSR_SATP            = 12'h180,
+   CSR_SPMPEN          = 12'h183,
+   CSR_SPMPENH         = 12'h193,
+   CSR_STIMECMP        = 12'h14D,
+   CSR_STIMECMPH       = 12'h15D,
 
     // Machine trap setup
     CSR_MSTATUS   = 12'h300,
     CSR_MISA      = 12'h301,
+    CSR_MDELEG    = 12'h302,
+    CSR_MIDELEG   = 12'h303,
     CSR_MIE       = 12'h304,
     CSR_MTVEC     = 12'h305,
     CSR_MCOUNTEREN= 12'h306,

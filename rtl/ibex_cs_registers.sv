@@ -252,6 +252,14 @@ module ibex_cs_registers import ibex_pkg::*; #(
   // TODO: Mode in STVEC is WARL
   logic [31:0] stvec_q;
   logic        stvec_en;
+  logic [31:0] sscratch_q;
+  logic        sscratch_en;
+  logic [31:0] sepc_q;
+  logic        sepc_en;
+  logic [31:0] scause_q;
+  logic        scause_en;
+  logic [31:0] stval_q;
+  logic        stval_en;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -577,9 +585,26 @@ module ibex_cs_registers import ibex_pkg::*; #(
       
       CSR_SSTATUSH: csr_rdata_int = '0;
       
-      // TODO: stvec, sip, sie, scounteren, sscratch, sepc, scause, stval, senvcfg, satp, stimecmp
-      // stvec: trap-vector base address
       CSR_STVEC: csr_rdata_int = stvec_q;
+      // TODO: Implement Supervisor level interrupt delegation
+      CSR_SIP:        csr_rdata_int = '0;
+      CSR_SIE:        csr_rdata_int = '0;
+      CSR_MDELEG:     csr_rdata_int = '0;
+      CSR_MIDELEG:    csr_rdata_int = '0;
+      // TODO: Implement performance monitoring counter delegation
+      CSR_SCOUNTEREN: csr_rdata_int = '0;
+      CSR_SSCRATCH:   csr_rdata_int = sscratch_q;
+      // TODO: Implement Supervisor exception handling
+      CSR_SEPC:       csr_rdata_int = sepc_q;
+      // TODO: Now scause is implemented as a 32-bit register.
+      //       When Supervisor-level exception are implemented this will be fixed.
+      CSR_SCAUSE:     csr_rdata_int = scause_q;
+      CSR_STVAL:      csr_rdata_int = stval_q;
+      CSR_SENVCFG:    csr_rdata_int = '0;
+      CSR_SATP:       csr_rdata_int = '0; // Virtual memory is not implemented
+      // TODO: Implement timer
+      CSR_STIMECMP:   csr_rdata_int = '0;
+      CSR_STIMECMPH:  csr_rdata_int = '0;
 
       default: begin
         illegal_csr = 1'b1;
@@ -766,6 +791,19 @@ module ibex_cs_registers import ibex_pkg::*; #(
         
         // Supervisor
         CSR_STVEC: stvec_en = 1'b1;
+        CSR_SIP:; // No-op
+        CSR_SIE:;
+        CSR_MDELEG:;
+        CSR_MIDELEG:;
+        CSR_SCOUNTEREN:;
+        CSR_SSCRATCH: sscratch_en = 1'b1;
+        CSR_SEPC:     sepc_en     = 1'b1;
+        CSR_SCAUSE:   scause_en   = 1'b1;
+        CSR_STVAL:    stval_en    = 1'b1;
+        CSR_SENVCFG:;
+        CSR_SATP:;
+        CSR_STIMECMP:;
+        CSR_STIMECMPH:;
 
         default:;
       endcase
@@ -1154,6 +1192,61 @@ module ibex_cs_registers import ibex_pkg::*; #(
     .rd_error_o()
   );
 
+  // SSCRATCH
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_sscratch_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (sscratch_en),
+    .rd_data_o (sscratch_q),
+    .rd_error_o()
+  );
+
+  // SEPC
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_sepc_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (sepc_en),
+    .rd_data_o (sepc_q),
+    .rd_error_o()
+  );
+
+  // SCAUSE
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_scause_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (scause_en),
+    .rd_data_o (scause_q),
+    .rd_error_o()
+  );
+
+  // STVAL
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_stval_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (stval_en),
+    .rd_data_o (stval_q),
+    .rd_error_o()
+  );
 
   // -----------------
   // PMP registers
