@@ -593,7 +593,7 @@ module ibex_decoder #(
       OPCODE_SYSTEM: begin
         if (instr[14:12] == 3'b000) begin
           // non CSR related SYSTEM instructions
-          unique case (instr[31:20])
+          unique casez (instr[31:20])
             12'h000:  // ECALL
               // environment (system) call
               ecall_insn_o = 1'b1;
@@ -607,9 +607,18 @@ module ibex_decoder #(
 
             12'h7b2:  // dret
               dret_insn_o = 1'b1;
+              
+            // TODO: SRET
+            // 12'h102: // sret
+            //   sret_insn_o = 1'b1;
 
             12'h105:  // wfi
               wfi_insn_o = 1'b1;
+            
+            12'b0001001_?????: // sfence.vma
+              // SFENCE.VMA is implemented as NOP, see FENCE, and also virtual memory
+              // is not implemented. TODO: Check if it is valid
+              rf_we = 1'b0;
 
             default:
               illegal_insn = 1'b1;
