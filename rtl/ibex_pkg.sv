@@ -302,7 +302,8 @@ package ibex_pkg;
     PC_BOOT,
     PC_JUMP,
     PC_EXC,
-    PC_ERET,
+    PC_ERET_M,
+    PC_ERET_S,
     PC_DRET,
     PC_BP
   } pc_sel_e;

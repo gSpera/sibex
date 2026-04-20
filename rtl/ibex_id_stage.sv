@@ -102,10 +102,12 @@ module ibex_id_stage #(
   output logic                      csr_save_wb_o,
   output logic                      csr_restore_mret_id_o,
   output logic                      csr_restore_dret_id_o,
+  output logic                      csr_restore_sret_id_o,
   output logic                      csr_save_cause_o,
   output logic [31:0]               csr_mtval_o,
   input  ibex_pkg::priv_lvl_e       priv_mode_i,
   input  logic                      csr_mstatus_tw_i,
+  input  logic                      csr_mstatus_tsr_i,
   input  logic                      illegal_csr_insn_i,
   input  logic                      data_ind_timing_i,
 
@@ -198,9 +200,11 @@ module ibex_id_stage #(
   logic        illegal_insn_dec;
   logic        illegal_dret_insn;
   logic        illegal_umode_insn;
+  logic        illegal_smode_insn;
   logic        ebrk_insn;
   logic        mret_insn_dec;
   logic        dret_insn_dec;
+  logic        sret_insn_dec;
   logic        ecall_insn_dec;
   logic        wfi_insn_dec;
 
@@ -447,6 +451,7 @@ module ibex_id_stage #(
     .ebrk_insn_o   (ebrk_insn),
     .mret_insn_o   (mret_insn_dec),
     .dret_insn_o   (dret_insn_dec),
+    .sret_insn_o   (sret_insn_dec),
     .ecall_insn_o  (ecall_insn_dec),
     .wfi_insn_o    (wfi_insn_dec),
     .jump_set_o    (jump_set_dec),
@@ -536,10 +541,15 @@ module ibex_id_stage #(
   // Some instructions can only be executed in M-Mode
   assign illegal_umode_insn = (priv_mode_i != PRIV_LVL_M) &
                               // MRET must be in M-Mode. TW means trap WFI to M-Mode.
+                              // TODO: WFI may trap in U-Mode if S-Mode is supported, regardeless of TW.
                               (mret_insn_dec | (csr_mstatus_tw_i & wfi_insn_dec));
+  assign illegal_smode_insn = (priv_mode_i <= PRIV_LVL_S) &
+                              // SRET can be esecuted both in S and M-mode.
+                              // TSR means trap SRET when executed in S-Mode.
+                              (sret_insn_dec & (csr_mstatus_tsr_i));
 
   assign illegal_insn_o = instr_valid_i &
-      (illegal_insn_dec | illegal_csr_insn_i | illegal_dret_insn | illegal_umode_insn);
+      (illegal_insn_dec | illegal_csr_insn_i | illegal_dret_insn | illegal_umode_insn | illegal_smode_insn);
 
   assign mem_resp_intg_err = lsu_load_resp_intg_err_i | lsu_store_resp_intg_err_i;
 
@@ -558,6 +568,7 @@ module ibex_id_stage #(
     .ecall_insn_i    (ecall_insn_dec),
     .mret_insn_i     (mret_insn_dec),
     .dret_insn_i     (dret_insn_dec),
+    .sret_insn_i     (sret_insn_dec),
     .wfi_insn_i      (wfi_insn_dec),
     .ebrk_insn_i     (ebrk_insn),
     .csr_pipe_flush_i(csr_pipe_flush),
@@ -612,6 +623,7 @@ module ibex_id_stage #(
     .csr_save_wb_o        (csr_save_wb_o),
     .csr_restore_mret_id_o(csr_restore_mret_id_o),
     .csr_restore_dret_id_o(csr_restore_dret_id_o),
+    .csr_restore_sret_id_o(csr_restore_sret_id_o),
     .csr_save_cause_o     (csr_save_cause_o),
     .csr_mtval_o          (csr_mtval_o),
     .priv_mode_i          (priv_mode_i),

@@ -334,7 +334,7 @@ module ibex_core import ibex_pkg::*; #(
   logic        nmi_mode;
   irqs_t       irqs;
   logic        csr_mstatus_mie;
-  logic [31:0] csr_mepc, csr_depc;
+  logic [31:0] csr_mepc, csr_sepc, csr_depc;
 
   // PMP signals
   logic [PMP_ADDR_MSB:0]  csr_pmp_addr [PMPNumRegions];
@@ -348,11 +348,13 @@ module ibex_core import ibex_pkg::*; #(
   logic        csr_save_wb;
   logic        csr_restore_mret_id;
   logic        csr_restore_dret_id;
+  logic        csr_restore_sret_id;
   logic        csr_save_cause;
   logic        csr_mtvec_init;
   logic [31:0] csr_mtvec;
   logic [31:0] csr_mtval;
   logic        csr_mstatus_tw;
+  logic        csr_mstatus_tsr;
   priv_lvl_e   priv_mode_id;
   priv_lvl_e   priv_mode_lsu;
 
@@ -509,7 +511,8 @@ module ibex_core import ibex_pkg::*; #(
     .nt_branch_addr_i  (nt_branch_addr),
 
     // CSRs
-    .csr_mepc_i      (csr_mepc),  // exception return address
+    .csr_mepc_i      (csr_mepc),  // exception return address (MRET)
+    .csr_sepc_i      (csr_sepc),  // exception return address (SRET)
     .csr_depc_i      (csr_depc),  // debug return address
     .csr_mtvec_i     (csr_mtvec),  // trap-vector base address
     .csr_mtvec_init_o(csr_mtvec_init),
@@ -634,10 +637,12 @@ module ibex_core import ibex_pkg::*; #(
     .csr_save_wb_o        (csr_save_wb),  // control signal to save PC
     .csr_restore_mret_id_o(csr_restore_mret_id),  // restore mstatus upon MRET
     .csr_restore_dret_id_o(csr_restore_dret_id),  // restore mstatus upon MRET
+    .csr_restore_sret_id_o(csr_restore_sret_id),  // restore mstatus upon SRET
     .csr_save_cause_o     (csr_save_cause),
     .csr_mtval_o          (csr_mtval),
     .priv_mode_i          (priv_mode_id),
     .csr_mstatus_tw_i     (csr_mstatus_tw),
+    .csr_mstatus_tsr_i    (csr_mstatus_tsr),
     .illegal_csr_insn_i   (illegal_csr_insn_id),
     .data_ind_timing_i    (data_ind_timing),
 
@@ -1105,7 +1110,9 @@ module ibex_core import ibex_pkg::*; #(
     .irqs_o           (irqs),
     .csr_mstatus_mie_o(csr_mstatus_mie),
     .csr_mstatus_tw_o (csr_mstatus_tw),
+    .csr_mstatus_tsr_o(csr_mstatus_tsr),
     .csr_mepc_o       (csr_mepc),
+    .csr_sepc_o       (csr_sepc),
     .csr_mtval_o      (crash_dump_mtval),
 
     // PMP
@@ -1142,6 +1149,7 @@ module ibex_core import ibex_pkg::*; #(
     .csr_save_wb_i     (csr_save_wb),
     .csr_restore_mret_i(csr_restore_mret_id),
     .csr_restore_dret_i(csr_restore_dret_id),
+    .csr_restore_sret_i(csr_restore_sret_id),
     .csr_save_cause_i  (csr_save_cause),
     .csr_mcause_i      (exc_cause),
     .csr_mtval_i       (csr_mtval),

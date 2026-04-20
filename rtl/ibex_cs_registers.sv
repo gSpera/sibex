@@ -43,6 +43,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   output ibex_pkg::priv_lvl_e  priv_mode_id_o,
   output ibex_pkg::priv_lvl_e  priv_mode_lsu_o,
   output logic                 csr_mstatus_tw_o,
+  output logic                 csr_mstatus_tsr_o,
 
   // mtvec
   output logic [31:0]          csr_mtvec_o,
@@ -67,6 +68,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   output ibex_pkg::irqs_t      irqs_o,                 // interrupt requests qualified with mie
   output logic                 csr_mstatus_mie_o,
   output logic [31:0]          csr_mepc_o,
+  output logic [31:0]          csr_sepc_o,
   output logic [31:0]          csr_mtval_o,
 
   // PMP
@@ -105,6 +107,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   input  logic                 csr_save_wb_i,
   input  logic                 csr_restore_mret_i,
   input  logic                 csr_restore_dret_i,
+  input  logic                 csr_restore_sret_i,
   input  logic                 csr_save_cause_i,
   input  ibex_pkg::exc_cause_t csr_mcause_i,
   input  logic [31:0]          csr_mtval_i,
@@ -665,6 +668,11 @@ module ibex_cs_registers import ibex_pkg::*; #(
     cpuctrlsts_part_d  = cpuctrlsts_part_q;
 
     double_fault_seen_o = 1'b0;
+    
+    sscratch_en = 1'b0;
+    sepc_en     = 1'b0;
+    scause_en   = 1'b0;
+    stval_en    = 1'b0;
 
     if (csr_we_int) begin
       unique case (csr_addr_i)
@@ -902,6 +910,33 @@ module ibex_cs_registers import ibex_pkg::*; #(
         end
       end // csr_restore_mret_i
 
+      csr_restore_sret_i: begin // SRET
+        priv_lvl_d     = mstatus_q.spp ? PRIV_LVL_S : PRIV_LVL_U;
+        mstatus_en     = 1'b1;
+        mstatus_d.sie  = mstatus_q.spie; // re-enable interrupts
+        // mstatus_d.sum   = 1'b1;
+
+        // SEC_CM: EXCEPTION.CTRL_FLOW.LOCAL_ESC
+        // SEC_CM: EXCEPTION.CTRL_FLOW.GLOBAL_ESC
+        cpuctrlsts_part_we              = 1'b1;
+        cpuctrlsts_part_d.sync_exc_seen = 1'b0;
+
+        if (nmi_mode_i) begin
+          // when returning from an NMI restore state from mstack CSR
+          // TODO: Should NMI execute a SRET??
+          mstatus_d.mpie = mstack_q.mpie;
+          mstatus_d.mpp  = mstack_q.mpp;
+          mepc_en        = 1'b1;
+          mepc_d         = mstack_epc_q;
+          mcause_en      = 1'b1;
+          mcause_d       = mstack_cause_q;
+        end else begin
+          // otherwise just set mstatus.MPIE/MPP
+          mstatus_d.mpie = 1'b1;
+          mstatus_d.mpp  = PRIV_LVL_U;
+        end
+      end // csr_restore_sret_i
+
       default:;
     endcase
   end
@@ -940,6 +975,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
 
   // directly output some registers
   assign csr_mepc_o  = mepc_q;
+  assign csr_sepc_o  = sepc_q;
   assign csr_depc_o  = depc_q;
   assign csr_mtvec_o = mtvec_q;
   assign csr_mtval_o = mtval_q;
@@ -948,6 +984,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
+  assign csr_mstatus_tsr_o   = mstatus_q.tsr;
   assign debug_single_step_o = dcsr_q.step;
   assign debug_ebreakm_o     = dcsr_q.ebreakm;
   assign debug_ebreaku_o     = dcsr_q.ebreaku;

@@ -25,6 +25,7 @@ module ibex_controller #(
   input  logic                  ecall_insn_i,            // decoder has ECALL instr
   input  logic                  mret_insn_i,             // decoder has MRET instr
   input  logic                  dret_insn_i,             // decoder has DRET instr
+  input  logic                  sret_insn_i,             // decoder has SRET instr
   input  logic                  wfi_insn_i,              // decoder has WFI instr
   input  logic                  ebrk_insn_i,             // decoder has EBREAK instr
   input  logic                  csr_pipe_flush_i,        // do CSR-related pipeline flush
@@ -95,6 +96,7 @@ module ibex_controller #(
   output logic                  csr_save_wb_o,
   output logic                  csr_restore_mret_id_o,
   output logic                  csr_restore_dret_id_o,
+  output logic                  csr_restore_sret_id_o,
   output logic                  csr_save_cause_o,
   output logic [31:0]           csr_mtval_o,
   input  ibex_pkg::priv_lvl_e   priv_mode_i,
@@ -162,6 +164,7 @@ module ibex_controller #(
   logic ecall_insn;
   logic mret_insn;
   logic dret_insn;
+  logic sret_insn;
   logic wfi_insn;
   logic ebrk_insn;
   logic csr_pipe_flush;
@@ -192,6 +195,7 @@ module ibex_controller #(
   assign ecall_insn      = ecall_insn_i      & instr_valid_i;
   assign mret_insn       = mret_insn_i       & instr_valid_i;
   assign dret_insn       = dret_insn_i       & instr_valid_i;
+  assign sret_insn       = sret_insn_i       & instr_valid_i;
   assign wfi_insn        = wfi_insn_i        & instr_valid_i;
   assign ebrk_insn       = ebrk_insn_i       & instr_valid_i;
   assign csr_pipe_flush  = csr_pipe_flush_i  & instr_valid_i;
@@ -228,7 +232,7 @@ module ibex_controller #(
   assign special_req_flush_only = wfi_insn | csr_pipe_flush;
 
   // These special requests cause a change in PC
-  assign special_req_pc_change = mret_insn | dret_insn | exc_req_d | exc_req_lsu;
+  assign special_req_pc_change = mret_insn | dret_insn | sret_insn | exc_req_d | exc_req_lsu;
 
   // generic special request signal, applies to all instructions
   assign special_req = special_req_pc_change | special_req_flush_only;
@@ -459,6 +463,7 @@ module ibex_controller #(
     csr_save_wb_o         = 1'b0;
     csr_restore_mret_id_o = 1'b0;
     csr_restore_dret_id_o = 1'b0;
+    csr_restore_sret_id_o = 1'b0;
     csr_save_cause_o      = 1'b0;
     csr_mtval_o           = '0;
 
@@ -796,9 +801,16 @@ module ibex_controller #(
         end else begin
           // special instructions and pipeline flushes
           if (mret_insn) begin
-            pc_mux_o              = PC_ERET;
+            pc_mux_o              = PC_ERET_M;
             pc_set_o              = 1'b1;
             csr_restore_mret_id_o = 1'b1;
+            if (nmi_mode_q) begin
+              nmi_mode_d          = 1'b0; // exit NMI mode
+            end
+          end else if (sret_insn) begin
+            pc_mux_o              = PC_ERET_S;
+            pc_set_o              = 1'b1;
+            csr_restore_sret_id_o = 1'b1;
             if (nmi_mode_q) begin
               nmi_mode_d          = 1'b0; // exit NMI mode
             end

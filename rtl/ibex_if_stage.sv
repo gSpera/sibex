@@ -111,7 +111,9 @@ module ibex_if_stage import ibex_pkg::*; #(
 
   // CSRs
   input  logic [31:0]                 csr_mepc_i,               // PC to restore after handling
-                                                                // the interrupt/exception
+                                                                // the interrupt/exception with MRET
+  input  logic [31:0]                 csr_sepc_i,               // PC to restore after handling
+                                                                // the interrupt/exception with SRET
   input  logic [31:0]                 csr_depc_i,               // PC to restore after handling
                                                                 // the debug request
   input  logic [31:0]                 csr_mtvec_i,              // base PC to jump to on exception
@@ -214,15 +216,16 @@ module ibex_if_stage import ibex_pkg::*; #(
   // fetch address selection mux
   always_comb begin : fetch_addr_mux
     unique case (pc_mux_internal)
-      PC_BOOT: fetch_addr_n = { boot_addr_i[31:8], 8'h80 };
-      PC_JUMP: fetch_addr_n = branch_target_ex_i;
-      PC_EXC:  fetch_addr_n = exc_pc;                       // set PC to exception handler
-      PC_ERET: fetch_addr_n = csr_mepc_i;                   // restore PC when returning from EXC
-      PC_DRET: fetch_addr_n = csr_depc_i;
+      PC_BOOT:   fetch_addr_n = { boot_addr_i[31:8], 8'h80 };
+      PC_JUMP:   fetch_addr_n = branch_target_ex_i;
+      PC_EXC:    fetch_addr_n = exc_pc;                       // set PC to exception handler
+      PC_ERET_M: fetch_addr_n = csr_mepc_i;                   // restore PC when returning from EXC (MRET)
+      PC_ERET_S: fetch_addr_n = csr_sepc_i;                   // restore PC when returning from EXC (SRET)
+      PC_DRET:   fetch_addr_n = csr_depc_i;
       // Without branch predictor will never get pc_mux_internal == PC_BP. We still handle no branch
       // predictor case here to ensure redundant mux logic isn't synthesised.
-      PC_BP:   fetch_addr_n = BranchPredictor ? predict_branch_pc : { boot_addr_i[31:8], 8'h80 };
-      default: fetch_addr_n = { boot_addr_i[31:8], 8'h80 };
+      PC_BP:     fetch_addr_n = BranchPredictor ? predict_branch_pc : { boot_addr_i[31:8], 8'h80 };
+      default:   fetch_addr_n = { boot_addr_i[31:8], 8'h80 };
     endcase
   end
 
@@ -730,7 +733,8 @@ module ibex_if_stage import ibex_pkg::*; #(
         PC_BOOT,
         PC_JUMP,
         PC_EXC,
-        PC_ERET,
+        PC_ERET_M,
+        PC_ERET_S,
         PC_DRET,
         PC_BP},
       pc_set_i)

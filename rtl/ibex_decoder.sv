@@ -28,6 +28,7 @@ module ibex_decoder #(
   output logic                 mret_insn_o,           // return from exception instr
                                                       // encountered
   output logic                 dret_insn_o,           // return from debug instr encountered
+  output logic                 sret_insn_o,           // return from supervisor mode
   output logic                 ecall_insn_o,          // syscall instr encountered
   output logic                 wfi_insn_o,            // wait for interrupt instr encountered
   output logic                 jump_set_o,            // jump taken set signal
@@ -232,6 +233,7 @@ module ibex_decoder #(
     ebrk_insn_o           = 1'b0;
     mret_insn_o           = 1'b0;
     dret_insn_o           = 1'b0;
+    sret_insn_o           = 1'b0;
     ecall_insn_o          = 1'b0;
     wfi_insn_o            = 1'b0;
 
@@ -608,9 +610,8 @@ module ibex_decoder #(
             12'h7b2:  // dret
               dret_insn_o = 1'b1;
               
-            // TODO: SRET
-            // 12'h102: // sret
-            //   sret_insn_o = 1'b1;
+            12'h102: // sret
+              sret_insn_o = 1'b1;
 
             12'h105:  // wfi
               wfi_insn_o = 1'b1;
