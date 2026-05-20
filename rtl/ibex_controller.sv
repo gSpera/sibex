@@ -770,6 +770,7 @@ module ibex_controller #(
             end
             ecall_insn_prio: begin
               exc_cause_o = (priv_mode_i == PRIV_LVL_M) ? ExcCauseEcallMMode :
+                            (priv_mode_i == PRIV_LVL_S) ? ExcCauseEcallSMode :
                                                           ExcCauseEcallUMode;
             end
             ebrk_insn_prio: begin

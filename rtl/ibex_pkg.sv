@@ -361,6 +361,8 @@ package ibex_pkg;
     '{irq_ext: 1'b0, irq_int: 1'b0, lower_cause: 5'd07};
   localparam exc_cause_t ExcCauseEcallUMode =
     '{irq_ext: 1'b0, irq_int: 1'b0, lower_cause: 5'd08};
+  localparam exc_cause_t ExcCauseEcallSMode =
+    '{irq_ext: 1'b0, irq_int: 1'b0, lower_cause: 5'd09};
   localparam exc_cause_t ExcCauseEcallMMode =
     '{irq_ext: 1'b0, irq_int: 1'b0, lower_cause: 5'd11};
 
