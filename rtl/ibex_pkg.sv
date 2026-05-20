@@ -491,7 +491,7 @@ package ibex_pkg;
     // Machine trap setup
     CSR_MSTATUS   = 12'h300,
     CSR_MISA      = 12'h301,
-    CSR_MDELEG    = 12'h302,
+    CSR_MEDELEG    = 12'h302,
     CSR_MIDELEG   = 12'h303,
     CSR_MIE       = 12'h304,
     CSR_MTVEC     = 12'h305,

@@ -244,6 +244,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
   logic        mtvec_err;
   logic        mtvec_en;
   irqs_t       mip;
+logic [31:0] mideleg_q;
+  logic        mideleg_en;
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
   logic [31:0] depc_q, depc_d;
@@ -251,17 +253,18 @@ module ibex_cs_registers import ibex_pkg::*; #(
   logic [31:0] dscratch0_q;
   logic [31:0] dscratch1_q;
   logic        dscratch0_en, dscratch1_en;
+
   // Supervisor
   // TODO: Mode in STVEC is WARL
   logic [31:0] stvec_q;
   logic        stvec_en;
   logic [31:0] sscratch_q;
   logic        sscratch_en;
-  logic [31:0] sepc_q;
+  logic [31:0] sepc_q, sepc_d;
   logic        sepc_en;
-  logic [31:0] scause_q;
+  exc_cause_t  scause_q, scause_d;
   logic        scause_en;
-  logic [31:0] stval_q;
+  logic [31:0] stval_q, stval_d;
   logic        stval_en;
 
   // CSRs for recoverable NMIs
@@ -589,19 +592,32 @@ module ibex_cs_registers import ibex_pkg::*; #(
       CSR_SSTATUSH: csr_rdata_int = '0;
       
       CSR_STVEC: csr_rdata_int = stvec_q;
-      // TODO: Implement Supervisor level interrupt delegation
-      CSR_SIP:        csr_rdata_int = '0;
-      CSR_SIE:        csr_rdata_int = '0;
-      CSR_MDELEG:     csr_rdata_int = '0;
+      CSR_SIP: begin
+        csr_rdata_int                                     = '0;
+        csr_rdata_int[CSR_MSIX_BIT]                       = mip.irq_software & mideleg_q[CSR_MSIX_BIT];
+        csr_rdata_int[CSR_MTIX_BIT]                       = mip.irq_timer    & mideleg_q[CSR_MTIX_BIT];
+        csr_rdata_int[CSR_MEIX_BIT]                       = mip.irq_external & mideleg_q[CSR_MEIX_BIT];
+        csr_rdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] = mip.irq_fast     & mideleg_q[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW];
+      end
+      
+      CSR_SIE: begin
+        csr_rdata_int                                     = '0;
+        csr_rdata_int[CSR_MSIX_BIT]                       = mie_q.irq_software & mideleg_q[CSR_MSIX_BIT];
+        csr_rdata_int[CSR_MTIX_BIT]                       = mie_q.irq_timer    & mideleg_q[CSR_MTIX_BIT];
+        csr_rdata_int[CSR_MEIX_BIT]                       = mie_q.irq_external & mideleg_q[CSR_MEIX_BIT];
+        csr_rdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] = mie_q.irq_fast     & mideleg_q[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW];
+      end
+
+      CSR_MEDELEG:    csr_rdata_int = '0;
       CSR_MIDELEG:    csr_rdata_int = '0;
       // TODO: Implement performance monitoring counter delegation
       CSR_SCOUNTEREN: csr_rdata_int = '0;
       CSR_SSCRATCH:   csr_rdata_int = sscratch_q;
-      // TODO: Implement Supervisor exception handling
       CSR_SEPC:       csr_rdata_int = sepc_q;
-      // TODO: Now scause is implemented as a 32-bit register.
-      //       When Supervisor-level exception are implemented this will be fixed.
-      CSR_SCAUSE:     csr_rdata_int = scause_q;
+      // scause: exception cause
+      CSR_SCAUSE: csr_rdata_int = {scause_q.irq_ext | scause_q.irq_int,
+                                   scause_q.irq_int ? {26{1'b1}} : 26'b0,
+                                   scause_q.lower_cause[4:0]};
       CSR_STVAL:      csr_rdata_int = stval_q;
       CSR_SENVCFG:    csr_rdata_int = '0;
       CSR_SATP:       csr_rdata_int = '0; // Virtual memory is not implemented
@@ -673,6 +689,12 @@ module ibex_cs_registers import ibex_pkg::*; #(
     sepc_en     = 1'b0;
     scause_en   = 1'b0;
     stval_en    = 1'b0;
+
+    sepc_d      = csr_wdata_int;
+    stval_d     = csr_wdata_int;
+    scause_d    = '{irq_ext :    csr_wdata_int[31:30] == 2'b10,
+                    irq_int :    csr_wdata_int[31:30] == 2'b11,
+                    lower_cause: csr_wdata_int[4:0]};
 
     if (csr_we_int) begin
       unique case (csr_addr_i)
@@ -801,8 +823,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
         CSR_STVEC: stvec_en = 1'b1;
         CSR_SIP:; // No-op
         CSR_SIE:;
-        CSR_MDELEG:;
-        CSR_MIDELEG:;
+        CSR_MEDELEG:;
+        CSR_MIDELEG:  mideleg_en  = 1'b1;
         CSR_SCOUNTEREN:;
         CSR_SSCRATCH: sscratch_en = 1'b1;
         CSR_SEPC:     sepc_en     = 1'b1;
@@ -1215,6 +1237,20 @@ module ibex_cs_registers import ibex_pkg::*; #(
     .rd_error_o()
   );
 
+  // MIDELEG
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_mideleg_csr(
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (mideleg_en),
+    .rd_data_o (mideleg_q),
+    .rd_error_o()
+  );
+
   // STVEC
   ibex_csr #(
     .Width     (32),
@@ -1251,7 +1287,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   ) u_sepc_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
+    .wr_data_i (sepc_d),
     .wr_en_i   (sepc_en),
     .rd_data_o (sepc_q),
     .rd_error_o()
@@ -1259,13 +1295,13 @@ module ibex_cs_registers import ibex_pkg::*; #(
 
   // SCAUSE
   ibex_csr #(
-    .Width     (32),
+    .Width     ($bits(exc_cause_t)),
     .ShadowCopy(1'b0),
     .ResetValue('0)
   ) u_scause_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
+    .wr_data_i ({scause_d}),
     .wr_en_i   (scause_en),
     .rd_data_o (scause_q),
     .rd_error_o()
@@ -1279,7 +1315,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   ) u_stval_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
+    .wr_data_i (stval_d),
     .wr_en_i   (stval_en),
     .rd_data_o (stval_q),
     .rd_error_o()
