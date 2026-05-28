@@ -74,11 +74,15 @@ module ibex_controller #(
 
   // interrupt signals
   input  logic                  csr_mstatus_mie_i,       // M-mode interrupt enable bit
-  input  logic                  irq_pending_i,           // interrupt request pending
-  input  ibex_pkg::irqs_t       irqs_i,                  // interrupt requests qualified with
+  input  logic                  irq_pending_m_i,         // interrupt request pending for machine
+  input  logic                  irq_pending_s_i,         // interrupt request pending for supervisor
+  input  ibex_pkg::irqs_t       irqs_m_i,                // interrupt requests qualified with
+                                                         // mie CSR
+  input  ibex_pkg::irqs_t       irqs_s_i,                // interrupt requests qualified with
                                                          // mie CSR
   input  logic                  irq_nm_ext_i,            // non-maskable interrupt
   output logic                  nmi_mode_o,              // core executing NMI handler
+  output ibex_pkg::priv_lvl_e   irq_taken_priv_lvl_o,    // priviled level taken
 
   // debug signals
   input  logic                  debug_req_i,
@@ -415,20 +419,26 @@ module ibex_controller #(
   //   cannot be interrupted by regular interrupts),
   // - while single stepping.
   assign handle_irq = ~debug_mode_q & ~debug_single_step_i & ~nmi_mode_q &
-      (irq_nm | (irq_pending_i & irq_enabled));
-
-  // generate ID of fast interrupts, highest priority to lowest ID
+      (irq_nm | ((irq_pending_m_i | irq_pending_s_i) & irq_enabled));
+  
+  // generate ID of fast interrupts, highest priority to lowest ID in M mode
   always_comb begin : gen_mfip_id
     mfip_id = 4'd0;
 
     for (int i = 14; i >= 0; i--) begin
-      if (irqs_i.irq_fast[i]) begin
+      if (irqs_s_i.irq_fast[i]) begin
+        mfip_id = i[3:0];
+      end
+    end
+
+    for (int i = 14; i >= 0; i--) begin
+      if (irqs_m_i.irq_fast[i]) begin
         mfip_id = i[3:0];
       end
     end
   end
 
-  assign unused_irq_timer = irqs_i.irq_timer;
+  assign unused_irq_timer = irqs_m_i.irq_timer | irqs_s_i.irq_timer;
 
   // Record the debug cause outside of the FSM
   // The decision to enter debug_mode and the write of the cause to DCSR happen
@@ -495,6 +505,9 @@ module ibex_controller #(
     perf_jump_o            = 1'b0;
 
     controller_run_o       = 1'b0;
+    
+    // An irq is taken to M-mode unless it is delegated to S-mode
+    irq_taken_priv_lvl_o   = PRIV_LVL_M;
 
     unique case (ctrl_fsm_cs)
       RESET: begin
@@ -530,7 +543,7 @@ module ibex_controller #(
 
         // normal execution flow
         // in debug mode or single step mode we leave immediately (wfi=nop)
-        if (irq_nm || irq_pending_i || debug_req_i || debug_mode_q || debug_single_step_i) begin
+        if (irq_nm || irq_pending_m_i || irq_pending_s_i || debug_req_i || debug_mode_q || debug_single_step_i) begin
           ctrl_fsm_ns = FIRST_FETCH;
         end else begin
           // Make sure clock remains disabled.
@@ -660,18 +673,32 @@ module ibex_controller #(
             end
 
             nmi_mode_d  = 1'b1; // enter NMI mode
-          end else if (irqs_i.irq_fast != 15'b0) begin
+          end else if (irqs_m_i.irq_fast != 15'b0) begin
             // generate exception cause ID from fast interrupt ID:
             // - first bit distinguishes interrupts from exceptions,
             // - second bit adds 16 to fast interrupt ID
             // for example ExcCauseIrqFast0 = {1'b1, 5'd16}
             exc_cause_o = '{irq_ext: 1'b1, irq_int: 1'b0, lower_cause: {1'b1, mfip_id}};
-          end else if (irqs_i.irq_external) begin
+          end else if (irqs_s_i.irq_fast != 15'b0) begin
+            exc_cause_o = '{irq_ext: 1'b1, irq_int: 1'b0, lower_cause: {1'b1, mfip_id}};
+            irq_taken_priv_lvl_o = PRIV_LVL_S;
+          end else if (irqs_m_i.irq_external) begin
             exc_cause_o = ExcCauseIrqExternalM;
-          end else if (irqs_i.irq_software) begin
+          end else if (irqs_s_i.irq_external) begin
+            exc_cause_o = ExcCauseIrqExternalM;
+            irq_taken_priv_lvl_o = PRIV_LVL_S;
+            
+          end else if (irqs_m_i.irq_software) begin
             exc_cause_o = ExcCauseIrqSoftwareM;
-          end else begin // irqs_i.irq_timer
+          end else if (irqs_s_i.irq_software) begin
+            exc_cause_o = ExcCauseIrqSoftwareM;
+            irq_taken_priv_lvl_o = PRIV_LVL_S;
+            
+          end else if (irqs_m_i.irq_timer) begin
             exc_cause_o = ExcCauseIrqTimerM;
+          end else if (irqs_s_i.irq_timer) begin
+            exc_cause_o = ExcCauseIrqTimerM;
+            irq_taken_priv_lvl_o = PRIV_LVL_S;
           end
         end
 

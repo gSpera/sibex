@@ -96,7 +96,8 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  logic                         irq_external_i,
   input  logic [14:0]                  irq_fast_i,
   input  logic                         irq_nm_i,
-  input  logic                         irq_pending_i,
+  input  logic                         irq_pending_m_i,
+  input  logic                         irq_pending_s_i,
 
   input  logic                         debug_req_i,
   input  crash_dump_t                  crash_dump_i,
@@ -349,7 +350,8 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic [IC_INDEX_W-1:0]   ic_data_addr;
     logic [LineSizeECC-1:0]  ic_data_wdata;
     logic                    ic_scr_key_req;
-    logic                    irq_pending;
+    logic                    irq_pending_m;
+    logic                    irq_pending_s;
     crash_dump_t             crash_dump;
     logic                    double_fault_seen;
     ibex_mubi_t              core_busy;
@@ -376,7 +378,8 @@ module ibex_lockstep import ibex_pkg::*; #(
   assign core_outputs_in.ic_data_addr        = ic_data_addr_i;
   assign core_outputs_in.ic_data_wdata       = ic_data_wdata_i;
   assign core_outputs_in.ic_scr_key_req      = ic_scr_key_req_i;
-  assign core_outputs_in.irq_pending         = irq_pending_i;
+  assign core_outputs_in.irq_pending_m       = irq_pending_m_i;
+  assign core_outputs_in.irq_pending_s       = irq_pending_s_i;
   assign core_outputs_in.crash_dump          = crash_dump_i;
   assign core_outputs_in.double_fault_seen   = double_fault_seen_i;
   assign core_outputs_in.core_busy           = core_busy_i;
@@ -504,7 +507,8 @@ module ibex_lockstep import ibex_pkg::*; #(
     .irq_external_i      (shadow_inputs_q[0].irq_external),
     .irq_fast_i          (shadow_inputs_q[0].irq_fast),
     .irq_nm_i            (shadow_inputs_q[0].irq_nm),
-    .irq_pending_o       (shadow_outputs_d.irq_pending),
+    .irq_pending_m_o     (shadow_outputs_d.irq_pending_m),
+    .irq_pending_s_o     (shadow_outputs_d.irq_pending_s),
 
     .debug_req_i         (shadow_inputs_q[0].debug_req),
     .crash_dump_o        (shadow_outputs_d.crash_dump),

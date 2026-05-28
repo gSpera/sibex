@@ -201,7 +201,8 @@ module ibex_top import ibex_pkg::*; #(
   logic                        clk;
   ibex_mubi_t                  core_busy_d, core_busy_q;
   logic                        clock_en;
-  logic                        irq_pending;
+  logic                        irq_pending_m;
+  logic                        irq_pending_s;
   // Core <-> Register file signals
   logic                        dummy_instr_id;
   logic                        dummy_instr_wb;
@@ -257,7 +258,7 @@ module ibex_top import ibex_pkg::*; #(
       .d_i   (core_busy_d),
       .q_o   (core_busy_q)
     );
-    assign clock_en = (core_busy_q != IbexMuBiOff) | debug_req_i | irq_pending | irq_nm_i;
+    assign clock_en = (core_busy_q != IbexMuBiOff) | debug_req_i | irq_pending_m | irq_pending_s | irq_nm_i;
   end else begin : g_clock_en_non_secure
     // For non secure Ibex only the bottom bit of core_busy_q is considered. Other FFs can be
     // optimized away during synthesis.
@@ -268,7 +269,7 @@ module ibex_top import ibex_pkg::*; #(
         core_busy_q <= core_busy_d;
       end
     end
-    assign clock_en = core_busy_q[0] | debug_req_i | irq_pending | irq_nm_i;
+    assign clock_en = core_busy_q[0] | debug_req_i | irq_pending_m | irq_pending_s | irq_nm_i;
 
     logic unused_core_busy;
     assign unused_core_busy = ^core_busy_q[$bits(ibex_mubi_t)-1:1];
@@ -397,7 +398,8 @@ module ibex_top import ibex_pkg::*; #(
     .irq_external_i,
     .irq_fast_i,
     .irq_nm_i,
-    .irq_pending_o(irq_pending),
+    .irq_pending_m_o(irq_pending_m),
+    .irq_pending_s_o(irq_pending_s),
 
     .debug_req_i,
     .crash_dump_o,
@@ -820,7 +822,8 @@ module ibex_top import ibex_pkg::*; #(
       irq_external_i,
       irq_fast_i,
       irq_nm_i,
-      irq_pending,
+      irq_pending_m,
+      irq_pending_s,
       debug_req_i,
       crash_dump_o,
       double_fault_seen_o,
@@ -869,7 +872,8 @@ module ibex_top import ibex_pkg::*; #(
     logic                         irq_external_local;
     logic [14:0]                  irq_fast_local;
     logic                         irq_nm_local;
-    logic                         irq_pending_local;
+    logic                         irq_pending_local_m;
+    logic                         irq_pending_local_s;
 
     logic                         debug_req_local;
     crash_dump_t                  crash_dump_local;
@@ -913,7 +917,8 @@ module ibex_top import ibex_pkg::*; #(
       irq_external_i,
       irq_fast_i,
       irq_nm_i,
-      irq_pending,
+      irq_pending_m,
+      irq_pending_s,
       debug_req_i,
       crash_dump_o,
       double_fault_seen_o,
@@ -956,7 +961,8 @@ module ibex_top import ibex_pkg::*; #(
       irq_external_local,
       irq_fast_local,
       irq_nm_local,
-      irq_pending_local,
+      irq_pending_local_m,
+      irq_pending_local_s,
       debug_req_local,
       crash_dump_local,
       double_fault_seen_local,
@@ -1071,7 +1077,8 @@ module ibex_top import ibex_pkg::*; #(
       .irq_external_i           (irq_external_local),
       .irq_fast_i               (irq_fast_local),
       .irq_nm_i                 (irq_nm_local),
-      .irq_pending_i            (irq_pending_local),
+      .irq_pending_m_i          (irq_pending_local_m),
+      .irq_pending_s_i          (irq_pending_local_s),
 
       .debug_req_i              (debug_req_local),
       .crash_dump_i             (crash_dump_local),

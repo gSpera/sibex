@@ -127,11 +127,14 @@ module ibex_id_stage #(
   input  logic [31:0]               lsu_addr_last_i,
 
   // Interrupt signals
-  input  logic                      csr_mstatus_mie_i,
-  input  logic                      irq_pending_i,
-  input  ibex_pkg::irqs_t           irqs_i,
-  input  logic                      irq_nm_i,
-  output logic                      nmi_mode_o,
+  input  logic                     csr_mstatus_mie_i,
+  input  logic                     irq_pending_m_i,
+  input  logic                     irq_pending_s_i,
+  input  ibex_pkg::irqs_t          irqs_m_i,
+  input  ibex_pkg::irqs_t          irqs_s_i,
+  input  logic                     irq_nm_i,
+  output logic                     nmi_mode_o,
+  output ibex_pkg::priv_lvl_e      irq_taken_priv_lvl_o,
 
   input  logic                      lsu_load_err_i,
   input  logic                      lsu_load_resp_intg_err_i,
@@ -611,11 +614,14 @@ module ibex_id_stage #(
     .jump_set_i       (jump_set),
 
     // interrupt signals
-    .csr_mstatus_mie_i(csr_mstatus_mie_i),
-    .irq_pending_i    (irq_pending_i),
-    .irqs_i           (irqs_i),
-    .irq_nm_ext_i     (irq_nm_i),
-    .nmi_mode_o       (nmi_mode_o),
+    .csr_mstatus_mie_i   (csr_mstatus_mie_i),
+    .irq_pending_m_i     (irq_pending_m_i),
+    .irq_pending_s_i     (irq_pending_s_i),
+    .irqs_m_i            (irqs_m_i),
+    .irqs_s_i            (irqs_s_i),
+    .irq_nm_ext_i        (irq_nm_i),
+    .nmi_mode_o          (nmi_mode_o),
+    .irq_taken_priv_lvl_o(irq_taken_priv_lvl_o),
 
     // CSR Controller Signals
     .csr_save_if_o        (csr_save_if_o),

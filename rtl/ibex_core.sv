@@ -111,7 +111,8 @@ module ibex_core import ibex_pkg::*; #(
   input  logic                         irq_external_i,
   input  logic [14:0]                  irq_fast_i,
   input  logic                         irq_nm_i,       // non-maskable interrupt
-  output logic                         irq_pending_o,
+  output logic                         irq_pending_m_o,
+  output logic                         irq_pending_s_o,
 
   // Debug Interface
   input  logic                         debug_req_i,
@@ -331,10 +332,12 @@ module ibex_core import ibex_pkg::*; #(
   logic           dummy_instr_wb;
 
   // Interrupts
-  logic        nmi_mode;
-  irqs_t       irqs;
-  logic        csr_mstatus_mie;
-  logic [31:0] csr_mepc, csr_sepc, csr_depc;
+  logic                nmi_mode;
+  irqs_t               irqs_m;
+  irqs_t               irqs_s;
+  ibex_pkg::priv_lvl_e irq_taken_priv_lvl;
+  logic                csr_mstatus_mie;
+  logic [31:0]         csr_mepc, csr_sepc, csr_depc;
 
   // PMP signals
   logic [PMP_ADDR_MSB:0]  csr_pmp_addr [PMPNumRegions];
@@ -666,11 +669,14 @@ module ibex_core import ibex_pkg::*; #(
     .expecting_store_resp_o(expecting_store_resp_id),
 
     // Interrupt Signals
-    .csr_mstatus_mie_i(csr_mstatus_mie),
-    .irq_pending_i    (irq_pending_o),
-    .irqs_i           (irqs),
-    .irq_nm_i         (irq_nm_i),
-    .nmi_mode_o       (nmi_mode),
+    .csr_mstatus_mie_i   (csr_mstatus_mie),
+    .irq_pending_m_i     (irq_pending_m_o),
+    .irq_pending_s_i     (irq_pending_s_o),
+    .irqs_m_i            (irqs_m),
+    .irqs_s_i            (irqs_s),
+    .irq_nm_i            (irq_nm_i),
+    .nmi_mode_o          (nmi_mode),
+    .irq_taken_priv_lvl_o(irq_taken_priv_lvl),
 
     // Debug Signal
     .debug_mode_o         (debug_mode),
@@ -1101,19 +1107,22 @@ module ibex_core import ibex_pkg::*; #(
     .csr_rdata_o (csr_rdata),
 
     // Interrupt related control signals
-    .irq_software_i   (irq_software_i),
-    .irq_timer_i      (irq_timer_i),
-    .irq_external_i   (irq_external_i),
-    .irq_fast_i       (irq_fast_i),
-    .nmi_mode_i       (nmi_mode),
-    .irq_pending_o    (irq_pending_o),
-    .irqs_o           (irqs),
-    .csr_mstatus_mie_o(csr_mstatus_mie),
-    .csr_mstatus_tw_o (csr_mstatus_tw),
-    .csr_mstatus_tsr_o(csr_mstatus_tsr),
-    .csr_mepc_o       (csr_mepc),
-    .csr_sepc_o       (csr_sepc),
-    .csr_mtval_o      (crash_dump_mtval),
+    .irq_software_i       (irq_software_i),
+    .irq_timer_i          (irq_timer_i),
+    .irq_external_i       (irq_external_i),
+    .irq_fast_i           (irq_fast_i),
+    .nmi_mode_i           (nmi_mode),
+    .irq_pending_m_o      (irq_pending_m_o),
+    .irq_pending_s_o      (irq_pending_s_o),
+    .irqs_m_o             (irqs_m),
+    .irqs_s_o             (irqs_s),
+    .irq_taken_priv_lvl_i (irq_taken_priv_lvl),
+    .csr_mstatus_mie_o    (csr_mstatus_mie),
+    .csr_mstatus_tw_o     (csr_mstatus_tw),
+    .csr_mstatus_tsr_o    (csr_mstatus_tsr),
+    .csr_mepc_o           (csr_mepc),
+    .csr_sepc_o           (csr_sepc),
+    .csr_mtval_o          (crash_dump_mtval),
 
     // PMP
     .csr_pmp_cfg_o    (csr_pmp_cfg),
@@ -1485,7 +1494,7 @@ module ibex_core import ibex_pkg::*; #(
   assign new_debug_req = (debug_req_i & ~debug_mode);
   assign new_nmi = irq_nm_i & ~nmi_mode & ~debug_mode;
   assign new_nmi_int = id_stage_i.controller_i.irq_nm_int & ~nmi_mode & ~debug_mode;
-  assign new_irq = irq_pending_o & (csr_mstatus_mie || (priv_mode_id == PRIV_LVL_U)) & ~nmi_mode &
+  assign new_irq = (irq_pending_m_o | irq_pending_s_o) & (csr_mstatus_mie || (priv_mode_id == PRIV_LVL_U)) & ~nmi_mode &
                    ~debug_mode;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin

@@ -64,8 +64,11 @@ module ibex_cs_registers import ibex_pkg::*; #(
   input  logic                 irq_external_i,
   input  logic [14:0]          irq_fast_i,
   input  logic                 nmi_mode_i,
-  output logic                 irq_pending_o,          // interrupt request pending
-  output ibex_pkg::irqs_t      irqs_o,                 // interrupt requests qualified with mie
+  output logic                 irq_pending_m_o,          // interrupt request pending for machine
+  output logic                 irq_pending_s_o,          // interrupt request pending for supervisor
+  output ibex_pkg::irqs_t      irqs_m_o,                 // interrupt requests qualified with mie
+  output ibex_pkg::irqs_t      irqs_s_o,                 // interrupt requests qualified with sie
+  input  ibex_pkg::priv_lvl_e  irq_taken_priv_lvl_i,
   output logic                 csr_mstatus_mie_o,
   output logic [31:0]          csr_mepc_o,
   output logic [31:0]          csr_sepc_o,
@@ -244,7 +247,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   logic        mtvec_err;
   logic        mtvec_en;
   irqs_t       mip;
-logic [31:0] mideleg_q;
+  logic [31:0] mideleg_q;
   logic        mideleg_en;
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
@@ -720,7 +723,14 @@ logic [31:0] mideleg_q;
         end
         
         // interrupt enable
-        CSR_MIE: mie_en = 1'b1;
+        CSR_MIE: begin
+          mie_en = 1'b1;
+          mie_d  = '0;
+          mie_d.irq_software = csr_wdata_int[CSR_MSIX_BIT];
+          mie_d.irq_timer    = csr_wdata_int[CSR_MTIX_BIT];
+          mie_d.irq_external = csr_wdata_int[CSR_MEIX_BIT];
+          mie_d.irq_fast     = csr_wdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW];
+        end
 
         CSR_MSCRATCH: mscratch_en = 1'b1;
 
@@ -822,7 +832,16 @@ logic [31:0] mideleg_q;
         // Supervisor
         CSR_STVEC: stvec_en = 1'b1;
         CSR_SIP:; // No-op
-        CSR_SIE:;
+        CSR_SIE: begin
+          mie_en = 1'b1;
+          mie_d  = '0;
+          // in sie, only delegated interrupts can be modified
+          mie_d.irq_software = mideleg_q[CSR_MSIX_BIT] ? csr_wdata_int[CSR_MSIX_BIT] : mie_q.irq_software;
+          mie_d.irq_timer    = mideleg_q[CSR_MTIX_BIT] ? csr_wdata_int[CSR_MTIX_BIT] : mie_q.irq_timer;
+          mie_d.irq_external = mideleg_q[CSR_MEIX_BIT] ? csr_wdata_int[CSR_MEIX_BIT] : mie_q.irq_external;
+          mie_d.irq_fast     =  mideleg_q[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] & csr_wdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] // delegated fast irqs
+                             | ~mideleg_q[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] & mie_q.irq_fast; // not delegated fast irqs
+        end
         CSR_MEDELEG:;
         CSR_MIDELEG:  mideleg_en  = 1'b1;
         CSR_SCOUNTEREN:;
@@ -857,7 +876,7 @@ logic [31:0] mideleg_q;
         endcase
 
         // Any exception, including debug mode, causes a switch to M-mode
-        priv_lvl_d = PRIV_LVL_M;
+        priv_lvl_d = irq_taken_priv_lvl_i;
 
         if (debug_csr_save_i) begin
           // all interrupts are masked
@@ -870,17 +889,34 @@ logic [31:0] mideleg_q;
         end else if (!debug_mode_i) begin
           // Exceptions do not update CSRs in debug mode, so ony write these CSRs if we're not in
           // debug mode.
-          mtval_en       = 1'b1;
+          // enable CSRs based on target execution level
+          if (irq_taken_priv_lvl_i == PRIV_LVL_M) begin
+            mtval_en       = 1'b1;
+            mepc_en        = 1'b1;
+            mcause_en      = 1'b1;
+
+            mstatus_d.mie  = 1'b0; // disable interrupts for m-mode
+            mstatus_d.mpie = mstatus_q.mie;
+          end else if (irq_taken_priv_lvl_i == PRIV_LVL_S) begin
+            stval_en       = 1'b1;
+            sepc_en        = 1'b1;
+            mcause_en      = 1'b1;
+            
+            mstatus_d.sie  = 1'b0; // disable interrupts for s-mode
+            mstatus_d.spie = 1'b0;
+          end
+          
           mtval_d        = csr_mtval_i;
-          mstatus_en     = 1'b1;
-          mstatus_d.mie  = 1'b0; // disable interrupts
-          // save current status
-          mstatus_d.mpie = mstatus_q.mie;
-          mstatus_d.mpp  = priv_lvl_q;
-          mepc_en        = 1'b1;
+          stval_d        = csr_mtval_i;
           mepc_d         = exception_pc;
-          mcause_en      = 1'b1;
+          sepc_d         = exception_pc;
           mcause_d       = csr_mcause_i;
+          scause_d       = csr_mcause_i;
+          
+          // save current status
+          mstatus_en     = 1'b1;
+          mstatus_d.mpp  = priv_lvl_q;
+        
           // save previous status for recoverable NMI
           mstack_en      = 1'b1;
 
@@ -1013,8 +1049,11 @@ logic [31:0] mideleg_q;
 
   // Qualify incoming interrupt requests in mip CSR with mie CSR for controller and to re-enable
   // clock upon WFI (must be purely combinational).
-  assign irqs_o        = mip & mie_q;
-  assign irq_pending_o = |irqs_o;
+  // TODO: Mideleg is truncated to lower bits, mip and mie doesn't consider fast irqs??
+  assign irqs_m_o        = (mip & mie_q) & ~mideleg_q[$bits(irqs_t)-1:0];
+  assign irqs_s_o        = (mip & mie_q) &  mideleg_q[$bits(irqs_t)-1:0];
+  assign irq_pending_m_o = |irqs_m_o;
+  assign irq_pending_s_o = |irqs_s_o;
 
   ////////////////////////
   // CSR instantiations //
@@ -1059,10 +1098,6 @@ logic [31:0] mideleg_q;
   );
 
   // MIE
-  assign mie_d.irq_software = csr_wdata_int[CSR_MSIX_BIT];
-  assign mie_d.irq_timer    = csr_wdata_int[CSR_MTIX_BIT];
-  assign mie_d.irq_external = csr_wdata_int[CSR_MEIX_BIT];
-  assign mie_d.irq_fast     = csr_wdata_int[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW];
   ibex_csr #(
     .Width     ($bits(irqs_t)),
     .ShadowCopy(1'b0),
@@ -1306,7 +1341,7 @@ logic [31:0] mideleg_q;
     .rd_data_o (scause_q),
     .rd_error_o()
   );
-
+  
   // STVAL
   ibex_csr #(
     .Width     (32),
