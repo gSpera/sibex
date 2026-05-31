@@ -431,6 +431,8 @@ package ibex_pkg;
   } pmp_cfg_mode_e;
 
   typedef struct packed {
+    logic          shared; // spmp
+    logic          user;   // spmp
     logic          lock;
     pmp_cfg_mode_e mode;
     logic          exec;
@@ -499,6 +501,7 @@ package ibex_pkg;
     CSR_MSTATUSH  = 12'h310,
 
     CSR_MENVCFG   = 12'h30A,
+    CSR_MPMPDELEG = 12'h316,
     CSR_MENVCFGH  = 12'h31A,
 
     // Machine trap handling
@@ -648,6 +651,73 @@ package ibex_pkg;
     CSR_CPUCTRLSTS     = 12'h7C0,
     CSR_SECURESEED     = 12'h7C1
   } csr_num_e;
+  
+  typedef enum logic[11:0] {
+    CSR_SISELECT_SPMP0  = 12'h100,
+    CSR_SISELECT_SPMP1  = 12'h101,
+    CSR_SISELECT_SPMP2  = 12'h102,
+    CSR_SISELECT_SPMP3  = 12'h103,
+    CSR_SISELECT_SPMP4  = 12'h104,
+    CSR_SISELECT_SPMP5  = 12'h105,
+    CSR_SISELECT_SPMP6  = 12'h106,
+    CSR_SISELECT_SPMP7  = 12'h107,
+    CSR_SISELECT_SPMP8  = 12'h108,
+    CSR_SISELECT_SPMP9  = 12'h109,
+    CSR_SISELECT_SPMP10 = 12'h10A,
+    CSR_SISELECT_SPMP11 = 12'h10B,
+    CSR_SISELECT_SPMP12 = 12'h10C,
+    CSR_SISELECT_SPMP13 = 12'h10D,
+    CSR_SISELECT_SPMP14 = 12'h10E,
+    CSR_SISELECT_SPMP15 = 12'h10F,
+    CSR_SISELECT_SPMP16 = 12'h110,
+    CSR_SISELECT_SPMP17 = 12'h111,
+    CSR_SISELECT_SPMP18 = 12'h112,
+    CSR_SISELECT_SPMP19 = 12'h113,
+    CSR_SISELECT_SPMP20 = 12'h114,
+    CSR_SISELECT_SPMP21 = 12'h115,
+    CSR_SISELECT_SPMP22 = 12'h116,
+    CSR_SISELECT_SPMP23 = 12'h117,
+    CSR_SISELECT_SPMP24 = 12'h118,
+    CSR_SISELECT_SPMP25 = 12'h119,
+    CSR_SISELECT_SPMP26 = 12'h11A,
+    CSR_SISELECT_SPMP27 = 12'h11B,
+    CSR_SISELECT_SPMP28 = 12'h11C,
+    CSR_SISELECT_SPMP29 = 12'h11D,
+    CSR_SISELECT_SPMP30 = 12'h11E,
+    CSR_SISELECT_SPMP31 = 12'h11F,
+    CSR_SISELECT_SPMP32 = 12'h120,
+    CSR_SISELECT_SPMP33 = 12'h121,
+    CSR_SISELECT_SPMP34 = 12'h122,
+    CSR_SISELECT_SPMP35 = 12'h123,
+    CSR_SISELECT_SPMP36 = 12'h124,
+    CSR_SISELECT_SPMP37 = 12'h125,
+    CSR_SISELECT_SPMP38 = 12'h126,
+    CSR_SISELECT_SPMP39 = 12'h127,
+    CSR_SISELECT_SPMP40 = 12'h128,
+    CSR_SISELECT_SPMP41 = 12'h129,
+    CSR_SISELECT_SPMP42 = 12'h12A,
+    CSR_SISELECT_SPMP43 = 12'h12B,
+    CSR_SISELECT_SPMP44 = 12'h12C,
+    CSR_SISELECT_SPMP45 = 12'h12D,
+    CSR_SISELECT_SPMP46 = 12'h12E,
+    CSR_SISELECT_SPMP47 = 12'h12F,
+    CSR_SISELECT_SPMP48 = 12'h130,
+    CSR_SISELECT_SPMP49 = 12'h131,
+    CSR_SISELECT_SPMP50 = 12'h132,
+    CSR_SISELECT_SPMP51 = 12'h133,
+    CSR_SISELECT_SPMP52 = 12'h134,
+    CSR_SISELECT_SPMP53 = 12'h135,
+    CSR_SISELECT_SPMP54 = 12'h136,
+    CSR_SISELECT_SPMP55 = 12'h137,
+    CSR_SISELECT_SPMP56 = 12'h138,
+    CSR_SISELECT_SPMP57 = 12'h139,
+    CSR_SISELECT_SPMP58 = 12'h13A,
+    CSR_SISELECT_SPMP59 = 12'h13B,
+    CSR_SISELECT_SPMP60 = 12'h13C,
+    CSR_SISELECT_SPMP61 = 12'h13D,
+    CSR_SISELECT_SPMP62 = 12'h13E,
+    CSR_SISELECT_SPMP63 = 12'h13F
+  } csr_siselect_e;
 
   // CSR pmp-related offsets
   parameter logic [11:0] CSR_OFF_PMP_CFG  = 12'h3A0; // pmp_cfg  @ 12'h3a0 - 12'h3a3
@@ -726,22 +796,22 @@ package ibex_pkg;
   // Protection) for more information.
 
   parameter pmp_cfg_t PmpCfgRst[PMP_MAX_REGIONS] = '{
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 0
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 1
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 2
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 3
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 4
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 5
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 6
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 7
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 8
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 9
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 10
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 11
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 12
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 13
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 14
-    '{lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}  // region 15
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 0
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 1
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 2
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 3
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 4
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 5
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 6
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 7
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 8
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 9
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 10
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 11
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 12
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 13
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}, // region 14
+    '{shared: 0'b0, user: 0'b0, lock: 1'b0, mode: PMP_MODE_OFF, exec: 1'b0, write: 1'b0, read: 1'b0}  // region 15
   };
 
   // Addresses are given in byte granularity for readability. A minimum of two

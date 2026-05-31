@@ -41,7 +41,7 @@ module ibex_pmp import ibex_pkg::*; #(
   logic [PMPNumChan-1:0][PMPNumRegions-1:0]        region_perm_check;
   logic [PMPNumChan-1:0]                           access_fault_check_res;
   logic [PMPNumChan-1:0]                           debug_mode_allowed_access;
-
+  
   ///////////////////////
   // Functions for PMP //
   ///////////////////////
@@ -61,7 +61,7 @@ module ibex_pmp import ibex_pkg::*; #(
                                           ibex_pkg::priv_lvl_e priv_mode,
                                           logic                permission_check);
     logic result = 1'b0;
-    logic unused_cfg = |region_csr_pmp_cfg.mode;
+    logic unused_cfg = |region_csr_pmp_cfg.mode || region_csr_pmp_cfg.user || region_csr_pmp_cfg.shared;
 
     if (!region_csr_pmp_cfg.read && region_csr_pmp_cfg.write) begin
       // Special-case shared regions where R = 0, W = 1
@@ -139,6 +139,7 @@ module ibex_pmp import ibex_pkg::*; #(
                         (csr_pmp_mseccfg_mml && (pmp_req_type == PMP_ACC_EXEC));
     logic matched = 1'b0;
 
+    // TODO: Valurare anche la SPMP, è più prioritaria di PMP
     // PMP entries are statically prioritized, from 0 to N-1
     // The lowest-numbered PMP entry which matches an address determines accessibility
     for (int r = 0; r < PMPNumRegions; r++) begin
@@ -154,7 +155,8 @@ module ibex_pmp import ibex_pkg::*; #(
   // Access checking
   // ---------------
 
-  for (genvar r = 0; r < PMPNumRegions; r++) begin : g_addr_exp
+  // pmp
+  for (genvar r = 0; r < PMPNumRegions; r++) begin : g_pmp_addr_exp
     // Start address for TOR matching
     if (r == 0) begin : g_entry0
       assign region_start_addr[r] = (csr_pmp_cfg_i[r].mode == PMP_MODE_TOR) ? 34'h000000000 :

@@ -2008,7 +2008,7 @@ module ibex_core import ibex_pkg::*; #(
       // is 6-bit.
       `DV_FCOV_SIGNAL(logic, warl_check_pmpcfg,
           fcov_csr_write &&
-          (cs_registers_i.g_pmp_registers.g_pmp_csrs[i_region].u_pmp_cfg_csr.wr_data_i !=
+          (cs_registers_i.g_pmp_registers.g_pmp_csrs[i_region].u_pmp_cfg_csr.wr_data_i[5:0] !=
           {cs_registers_i.csr_wdata_int[(i_region%4)*PMP_CFG_W+:5],
            cs_registers_i.csr_wdata_int[(i_region%4)*PMP_CFG_W+7]}))
 

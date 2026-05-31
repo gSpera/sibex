@@ -142,7 +142,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   // Is a PMP config a locked one that allows M-mode execution when MSECCFG.MML is set (either
   // M mode alone or shared M/U mode execution)?
   function automatic logic is_mml_m_exec_cfg(ibex_pkg::pmp_cfg_t pmp_cfg);
-    logic unused_cfg = ^{pmp_cfg.mode};
+    logic unused_cfg = ^{pmp_cfg.mode, pmp_cfg.user, pmp_cfg.shared};
     logic value = 1'b0;
 
     if (pmp_cfg.lock) begin
@@ -249,6 +249,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
   irqs_t       mip;
   logic [31:0] mideleg_q;
   logic        mideleg_en;
+  logic [ 6:0] mpmpdeleg_q;
+  logic        mpmpdeleg_en;
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
   logic [31:0] depc_q, depc_d;
@@ -269,6 +271,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
   logic        scause_en;
   logic [31:0] stval_q, stval_d;
   logic        stval_en;
+  logic        siselect_en;
+  logic [11:0] siselect_q;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -333,6 +337,30 @@ module ibex_cs_registers import ibex_pkg::*; #(
 
   logic [7:0]  unused_boot_addr;
   logic [2:0]  unused_csr_addr;
+
+  // supervisor indirect CSR
+  logic [31:0] csr_sireg1;
+  logic [31:0] csr_sireg2;
+  logic [31:0] csr_sireg3;
+  logic [31:0] csr_sireg4;
+  logic [31:0] csr_sireg5;
+  logic [31:0] csr_sireg6;
+  
+  // indirect read
+  always_comb begin
+    csr_sireg1 = '0;
+    csr_sireg2 = '0;
+    csr_sireg3 = '0;
+    csr_sireg4 = '0;
+    csr_sireg5 = '0;
+    csr_sireg6 = '0;
+    
+    if (siselect_q >= CSR_SISELECT_SPMP0 && siselect_q <= CSR_SISELECT_SPMP63) begin
+      static logic [3:0] index = {siselect_q - CSR_SISELECT_SPMP0 - {5'b0, mpmpdeleg_q}}[3:0];
+      csr_sireg1 = csr_pmp_addr_o[index][31:0];
+      csr_sireg2 = {24'b0, pmp_cfg_rdata[index]};
+    end
+  end
 
   assign unused_boot_addr = boot_addr_i[7:0];
 
@@ -628,6 +656,14 @@ module ibex_cs_registers import ibex_pkg::*; #(
       CSR_STIMECMP:   csr_rdata_int = '0;
       CSR_STIMECMPH:  csr_rdata_int = '0;
 
+      // SPMP Indirect access
+      CSR_SIREG:    csr_rdata_int = csr_sireg1;
+      CSR_SIREG2:   csr_rdata_int = csr_sireg2;
+      CSR_SIREG3:   csr_rdata_int = csr_sireg3;
+      CSR_SIREG4:   csr_rdata_int = csr_sireg4;
+      CSR_SIREG5:   csr_rdata_int = csr_sireg5;
+      CSR_SIREG6:   csr_rdata_int = csr_sireg6;
+
       default: begin
         illegal_csr = 1'b1;
       end
@@ -692,6 +728,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
     sepc_en     = 1'b0;
     scause_en   = 1'b0;
     stval_en    = 1'b0;
+    siselect_en = 1'b0;
 
     sepc_d      = csr_wdata_int;
     stval_d     = csr_wdata_int;
@@ -843,16 +880,18 @@ module ibex_cs_registers import ibex_pkg::*; #(
                              | ~mideleg_q[CSR_MFIX_BIT_HIGH:CSR_MFIX_BIT_LOW] & mie_q.irq_fast; // not delegated fast irqs
         end
         CSR_MEDELEG:;
-        CSR_MIDELEG:  mideleg_en  = 1'b1;
+        CSR_MIDELEG:   mideleg_en   = 1'b1;
+        CSR_MPMPDELEG: mpmpdeleg_en = 1'b1;
         CSR_SCOUNTEREN:;
-        CSR_SSCRATCH: sscratch_en = 1'b1;
-        CSR_SEPC:     sepc_en     = 1'b1;
-        CSR_SCAUSE:   scause_en   = 1'b1;
-        CSR_STVAL:    stval_en    = 1'b1;
+        CSR_SSCRATCH:  sscratch_en  = 1'b1;
+        CSR_SEPC:      sepc_en      = 1'b1;
+        CSR_SCAUSE:    scause_en    = 1'b1;
+        CSR_STVAL:     stval_en     = 1'b1;
         CSR_SENVCFG:;
         CSR_SATP:;
         CSR_STIMECMP:;
         CSR_STIMECMPH:;
+        CSR_SISELECT: siselect_en = 1'b1;
 
         default:;
       endcase
@@ -1285,7 +1324,21 @@ module ibex_cs_registers import ibex_pkg::*; #(
     .rd_data_o (mideleg_q),
     .rd_error_o()
   );
-
+  
+  // MPMPDELEG
+  ibex_csr #(
+    .Width     (7),
+    .ShadowCopy(ShadowCSR),
+    .ResetValue('0)
+  ) u_mpmpdeleg_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int[6:0]),
+    .wr_en_i   (mpmpdeleg_en),
+    .rd_data_o (mpmpdeleg_q),
+    .rd_error_o()
+  );
+  
   // STVEC
   ibex_csr #(
     .Width     (32),
@@ -1356,6 +1409,20 @@ module ibex_cs_registers import ibex_pkg::*; #(
     .rd_error_o()
   );
 
+  // SISELECT
+  ibex_csr #(
+    .Width     (12),
+    .ShadowCopy(1'b0),
+    .ResetValue('0)
+  ) u_siselect_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int[11:0]),
+    .wr_en_i   (siselect_en),
+    .rd_data_o (siselect_q),
+    .rd_error_o()
+  );
+
   // -----------------
   // PMP registers
   // -----------------
@@ -1374,23 +1441,27 @@ module ibex_cs_registers import ibex_pkg::*; #(
     logic [PMPNumRegions-1:0]    pmp_addr_we;
     logic [PMPNumRegions-1:0]    pmp_addr_err;
     logic                        any_pmp_entry_locked;
+    logic [PMPNumRegions-1:0]    pmp_not_delegated;
 
     // Expanded / qualified register read data
     for (genvar i = 0; i < PMP_MAX_REGIONS; i++) begin : g_exp_rd_data
+      assign pmp_not_delegated[i] = i < mpmpdeleg_q;
+
       if (i < PMPNumRegions) begin : g_implemented_regions
         // Add in zero padding for reserved fields
-        assign pmp_cfg_rdata[i] = {pmp_cfg[i].lock, 2'b00, pmp_cfg[i].mode,
-                                   pmp_cfg[i].exec, pmp_cfg[i].write, pmp_cfg[i].read};
+        assign pmp_cfg_rdata[i] = pmp_not_delegated[i]
+                                ? {pmp_cfg[i].lock, 2'b00, pmp_cfg[i].mode, pmp_cfg[i].exec, pmp_cfg[i].write, pmp_cfg[i].read}
+                                : 'h0;
 
         // Address field read data depends on the current programmed mode and the granularity
         if (PMPGranularity == 0) begin : g_pmp_g0
           // If G == 0, read data is unmodified
-          assign pmp_addr_rdata[i] = pmp_addr[i];
+          assign pmp_addr_rdata[i] = pmp_not_delegated[i] ? pmp_addr[i] : 'h0;
 
         end else if (PMPGranularity == 1) begin : g_pmp_g1
           // If G == 1, bit [G-1] reads as zero in TOR or OFF mode
           always_comb begin
-            pmp_addr_rdata[i] = pmp_addr[i];
+            pmp_addr_rdata[i] = pmp_not_delegated[i] ? pmp_addr[i] : 'h0;
             if ((pmp_cfg[i].mode == PMP_MODE_OFF) || (pmp_cfg[i].mode == PMP_MODE_TOR)) begin
               pmp_addr_rdata[i][PMPGranularity-1:0] = '0;
             end
@@ -1400,7 +1471,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
           // For G >= 2, bits are masked to one or zero depending on the mode
           always_comb begin
             // In NAPOT mode, bits [G-2:0] must read as one
-            pmp_addr_rdata[i] = {pmp_addr[i], {PMPGranularity - 1{1'b1}}};
+            pmp_addr_rdata[i] = pmp_not_delegated[i] ? {pmp_addr[i], {PMPGranularity - 1{1'b1}}} : 'h0;
 
             if ((pmp_cfg[i].mode == PMP_MODE_OFF) || (pmp_cfg[i].mode == PMP_MODE_TOR)) begin
               // In TOR or OFF mode, bits [G-1:0] must read as zero
@@ -1424,27 +1495,49 @@ module ibex_cs_registers import ibex_pkg::*; #(
       assign pmp_cfg_we[i] = csr_we_int                                       &
                              ~pmp_cfg_locked[i]                               &
                              ~pmp_cfg_wr_suppress[i]                          &
-                             (csr_addr == (CSR_OFF_PMP_CFG + (i[11:0] >> 2)));
+                             (csr_addr == (CSR_OFF_PMP_CFG + (i[11:0] >> 2))) &
+                             i < mpmpdeleg_q;
 
-      // Select the correct WDATA (each CSR contains 4 CFG fields, each with 2 RES bits)
-      assign pmp_cfg_wdata[i].lock  = csr_wdata_int[(i%4)*PMP_CFG_W+7];
-      // NA4 mode is not selectable when G > 0, mode is treated as OFF
-      always_comb begin
-        unique case (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2])
-          2'b00   : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
-          2'b01   : pmp_cfg_wdata[i].mode = PMP_MODE_TOR;
-          2'b10   : pmp_cfg_wdata[i].mode = (PMPGranularity == 0) ? PMP_MODE_NA4:
-                                                                    PMP_MODE_OFF;
-          2'b11   : pmp_cfg_wdata[i].mode = PMP_MODE_NAPOT;
-          default : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
-        endcase
+      always_comb  begin
+        if (pmp_not_delegated[i]) begin: g_pmp_wr
+          assign pmp_cfg_wdata[i].shared  = 1'b0;
+          assign pmp_cfg_wdata[i].user    = 1'b0;
+          
+          // Select the correct WDATA (each CSR contains 4 CFG fields, each with 2 RES bits)
+          assign pmp_cfg_wdata[i].lock  = csr_wdata_int[(i%4)*PMP_CFG_W+7];
+          // NA4 mode is not selectable when G > 0, mode is treated as OFF
+          unique case (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2])
+            2'b00   : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
+            2'b01   : pmp_cfg_wdata[i].mode = PMP_MODE_TOR;
+            2'b10   : pmp_cfg_wdata[i].mode = (PMPGranularity == 0) ? PMP_MODE_NA4:
+                                                                      PMP_MODE_OFF;
+            2'b11   : pmp_cfg_wdata[i].mode = PMP_MODE_NAPOT;
+            default : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
+          endcase
+          assign pmp_cfg_wdata[i].exec  = csr_wdata_int[(i%4)*PMP_CFG_W+2];
+          // When MSECCFG.MML is unset, W = 1, R = 0 is a reserved combination, so force W to 0 if R ==
+          // 0. Otherwise allow all possible values to be written.
+          assign pmp_cfg_wdata[i].write = pmp_mseccfg_q.mml ? csr_wdata_int[(i%4)*PMP_CFG_W+1] :
+                                                              &csr_wdata_int[(i%4)*PMP_CFG_W+:2];
+          assign pmp_cfg_wdata[i].read  = csr_wdata_int[(i%4)*PMP_CFG_W];
+        end else begin
+          // TODO: Assign spmp values
+          assign pmp_cfg_wdata[i].shared = csr_wdata_int[9];
+          assign pmp_cfg_wdata[i].user   = csr_wdata_int[8];
+          assign pmp_cfg_wdata[i].lock   = csr_wdata_int[7];
+          unique case (csr_wdata_int[4:3])
+            2'b00   : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
+            2'b01   : pmp_cfg_wdata[i].mode = PMP_MODE_TOR;
+            2'b10   : pmp_cfg_wdata[i].mode = (PMPGranularity == 0) ? PMP_MODE_NA4:
+                                                                      PMP_MODE_OFF;
+            2'b11   : pmp_cfg_wdata[i].mode = PMP_MODE_NAPOT;
+            default : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
+          endcase
+          assign pmp_cfg_wdata[i].exec   = csr_wdata_int[2];
+          assign pmp_cfg_wdata[i].write  = csr_wdata_int[1];
+          assign pmp_cfg_wdata[i].read   = csr_wdata_int[0];
+        end;
       end
-      assign pmp_cfg_wdata[i].exec  = csr_wdata_int[(i%4)*PMP_CFG_W+2];
-      // When MSECCFG.MML is unset, W = 1, R = 0 is a reserved combination, so force W to 0 if R ==
-      // 0. Otherwise allow all possible values to be written.
-      assign pmp_cfg_wdata[i].write = pmp_mseccfg_q.mml ? csr_wdata_int[(i%4)*PMP_CFG_W+1] :
-                                                          &csr_wdata_int[(i%4)*PMP_CFG_W+:2];
-      assign pmp_cfg_wdata[i].read  = csr_wdata_int[(i%4)*PMP_CFG_W];
 
       ibex_csr #(
         .Width     ($bits(pmp_cfg_t)),
