@@ -78,6 +78,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
   output ibex_pkg::pmp_cfg_t     csr_pmp_cfg_o  [PMPNumRegions],
   output logic [PMP_ADDR_MSB:0]  csr_pmp_addr_o [PMPNumRegions],
   output ibex_pkg::pmp_mseccfg_t csr_pmp_mseccfg_o,
+  output logic [6:0]             csr_mpmpdeleg_o,
+  output logic                   csr_sstatus_sum_o,
 
   // debug
   input  logic                 debug_mode_i,
@@ -363,6 +365,9 @@ module ibex_cs_registers import ibex_pkg::*; #(
   end
 
   assign unused_boot_addr = boot_addr_i[7:0];
+  
+  assign csr_mpmpdeleg_o   = mpmpdeleg_q;
+  assign csr_sstatus_sum_o = mstatus_q[CSR_MSTATUS_SUM_BIT];
 
   /////////////
   // CSR reg //
@@ -881,6 +886,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
         end
         CSR_MEDELEG:;
         CSR_MIDELEG:   mideleg_en   = 1'b1;
+        // TODO: Add write logic
         CSR_MPMPDELEG: mpmpdeleg_en = 1'b1;
         CSR_SCOUNTEREN:;
         CSR_SSCRATCH:  sscratch_en  = 1'b1;

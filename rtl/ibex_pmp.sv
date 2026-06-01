@@ -19,6 +19,8 @@ module ibex_pmp import ibex_pkg::*; #(
   input  ibex_pkg::pmp_cfg_t     csr_pmp_cfg_i     [PMPNumRegions],
   input  logic [PMP_ADDR_MSB:0]  csr_pmp_addr_i    [PMPNumRegions],
   input  ibex_pkg::pmp_mseccfg_t csr_pmp_mseccfg_i,
+  input  logic [6:0]             csr_mpmpdeleg_i,
+  input  logic                   csr_sstatus_sum_i,
 
   input  logic                   debug_mode_i,
 
@@ -109,19 +111,67 @@ module ibex_pmp import ibex_pkg::*; #(
           permission_check;
   endfunction
 
+  function automatic logic eval_rwx(ibex_pkg::pmp_req_e req_type, ibex_pkg::pmp_cfg_t pmp_cfg);
+    logic unused = |pmp_cfg[7:3];
+    return ((req_type == PMP_ACC_EXEC)  & pmp_cfg.exec ) |
+           ((req_type == PMP_ACC_WRITE) & pmp_cfg.write) |
+           ((req_type == PMP_ACC_READ)  & pmp_cfg.read );
+  endfunction;
+
+  // Compute permissions check that apply to a SPMP region.
+  function automatic logic spmp_perm_check(ibex_pkg::pmp_cfg_t  pmp_cfg,
+                                           ibex_pkg::pmp_req_e  pmp_req_type,
+                                           ibex_pkg::priv_lvl_e priv_mode);
+    logic result = 1'b0;
+    logic unused_cfg = |pmp_cfg.mode;
+    if (priv_mode == PRIV_LVL_M)
+      // M-mode ignore SPMP
+      result = 1'b0;
+    else begin
+      // TODO: Manage rules
+      unique case ({pmp_cfg.shared, pmp_cfg.user})
+        // Supervisor rule
+        2'b00: result = (priv_mode == PRIV_LVL_U) || eval_rwx(pmp_req_type, pmp_cfg);
+        // User   -> fault
+        // System -> check
+
+        // User rule
+        2'b01: result = (priv_mode == PRIV_LVL_S && ~csr_sstatus_sum_i) || (priv_mode == PRIV_LVL_S && pmp_req_type == PMP_ACC_EXEC) || eval_rwx(pmp_req_type, pmp_cfg);
+        // User -> check
+        // System &&  SUM -> RW check, X fault
+        // System && !SUM -> fault
+
+
+        // Shared rule
+        2'b10: result = (priv_mode == PRIV_LVL_S && eval_rwx(pmp_req_type, pmp_cfg)) || (eval_rwx(pmp_req_type, pmp_cfg)) || (pmp_cfg.write && pmp_cfg.read && pmp_req_type == PMP_ACC_WRITE);
+        // User   -> RWX check, R XOR W, R && W -> R
+        // System -> check
+
+        // RESERVED
+        2'b11: result = 1'b1;
+      endcase;
+    end;
+    
+    return result;
+  endfunction
+
   // A wrapper function in which it is decided which form of permission check function gets called
   function automatic logic perm_check_wrapper(logic                csr_pmp_mseccfg_mml,
                                               ibex_pkg::pmp_cfg_t  region_csr_pmp_cfg,
                                               ibex_pkg::pmp_req_e  pmp_req_type,
                                               ibex_pkg::priv_lvl_e priv_mode,
-                                              logic                permission_check);
-    return csr_pmp_mseccfg_mml ? mml_perm_check(region_csr_pmp_cfg,
+                                              logic                permission_check,
+                                              logic [6:0]          pmp_index);
+    return (pmp_index < csr_mpmpdeleg_i) ?
+            csr_pmp_mseccfg_mml ? mml_perm_check(region_csr_pmp_cfg,
                                                 pmp_req_type,
                                                 priv_mode,
                                                 permission_check) :
                                  orig_perm_check(region_csr_pmp_cfg.lock,
                                                  priv_mode,
-                                                 permission_check);
+                                                 permission_check)
+            : spmp_perm_check(region_csr_pmp_cfg, pmp_req_type, priv_mode);
+
   endfunction
 
   // Access fault determination / prioritization
@@ -139,7 +189,6 @@ module ibex_pmp import ibex_pkg::*; #(
                         (csr_pmp_mseccfg_mml && (pmp_req_type == PMP_ACC_EXEC));
     logic matched = 1'b0;
 
-    // TODO: Valurare anche la SPMP, è più prioritaria di PMP
     // PMP entries are statically prioritized, from 0 to N-1
     // The lowest-numbered PMP entry which matches an address determines accessibility
     for (int r = 0; r < PMPNumRegions; r++) begin
@@ -226,7 +275,8 @@ module ibex_pmp import ibex_pkg::*; #(
                                                           csr_pmp_cfg_i[r],
                                                           pmp_req_type_i[c],
                                                           priv_mode_i[c],
-                                                          region_basic_perm_check[c][r]);
+                                                          region_basic_perm_check[c][r],
+                                                          r);
 
       // Address bits below PMP granularity (which starts at 4 byte) are deliberately unused.
       logic unused_sigs;

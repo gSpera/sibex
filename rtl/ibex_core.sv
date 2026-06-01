@@ -345,6 +345,8 @@ module ibex_core import ibex_pkg::*; #(
   pmp_mseccfg_t           csr_pmp_mseccfg;
   logic                   pmp_req_err  [PMPNumChan];
   logic                   data_req_out;
+  logic [6:0]             csr_mpmpdeleg;
+  logic                   csr_sstatus_sum;
 
   logic        csr_save_if;
   logic        csr_save_id;
@@ -1128,6 +1130,8 @@ module ibex_core import ibex_pkg::*; #(
     .csr_pmp_cfg_o    (csr_pmp_cfg),
     .csr_pmp_addr_o   (csr_pmp_addr),
     .csr_pmp_mseccfg_o(csr_pmp_mseccfg),
+    .csr_mpmpdeleg_o  (csr_mpmpdeleg),
+    .csr_sstatus_sum_o(csr_sstatus_sum),
 
     // debug
     .csr_depc_o           (csr_depc),
@@ -1219,6 +1223,8 @@ module ibex_core import ibex_pkg::*; #(
       .csr_pmp_cfg_i    (csr_pmp_cfg),
       .csr_pmp_addr_i   (csr_pmp_addr),
       .csr_pmp_mseccfg_i(csr_pmp_mseccfg),
+      .csr_mpmpdeleg_i  (csr_mpmpdeleg),
+      .csr_sstatus_sum_i(csr_sstatus_sum),
       .debug_mode_i     (debug_mode),
       .priv_mode_i      (pmp_priv_lvl),
       // Access checking channels
