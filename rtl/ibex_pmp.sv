@@ -122,37 +122,41 @@ module ibex_pmp import ibex_pkg::*; #(
   function automatic logic spmp_perm_check(ibex_pkg::pmp_cfg_t  pmp_cfg,
                                            ibex_pkg::pmp_req_e  pmp_req_type,
                                            ibex_pkg::priv_lvl_e priv_mode);
-    logic result = 1'b0;
+    logic fault = 1'b0;
     logic unused_cfg = |pmp_cfg.mode;
     if (priv_mode == PRIV_LVL_M)
       // M-mode ignore SPMP
-      result = 1'b0;
+      fault = 1'b0;
     else begin
-      // TODO: Manage rules
-      unique case ({pmp_cfg.shared, pmp_cfg.user})
+      unique case ({pmp_cfg.shared, pmp_cfg.user, priv_mode == PRIV_LVL_S})
         // Supervisor rule
-        2'b00: result = (priv_mode == PRIV_LVL_U) || eval_rwx(pmp_req_type, pmp_cfg);
-        // User   -> fault
-        // System -> check
+        3'b000: fault = '1; // User   -> fault
+        3'b001: fault = eval_rwx(pmp_req_type, pmp_cfg); // System -> check
 
         // User rule
-        2'b01: result = (priv_mode == PRIV_LVL_S && ~csr_sstatus_sum_i) || (priv_mode == PRIV_LVL_S && pmp_req_type == PMP_ACC_EXEC) || eval_rwx(pmp_req_type, pmp_cfg);
-        // User -> check
-        // System &&  SUM -> RW check, X fault
-        // System && !SUM -> fault
+        3'b010: fault = eval_rwx(pmp_req_type, pmp_cfg); // User -> check
+        3'b011: fault = csr_sstatus_sum_i
+                          ? (pmp_req_type == PMP_ACC_EXEC ? '1 : ~eval_rwx(pmp_req_type, pmp_cfg)) // System &&  SUM -> RW check, X fault
+                          : '1; // System && !SUM -> fault
 
 
         // Shared rule
-        2'b10: result = (priv_mode == PRIV_LVL_S && eval_rwx(pmp_req_type, pmp_cfg)) || (eval_rwx(pmp_req_type, pmp_cfg)) || (pmp_cfg.write && pmp_cfg.read && pmp_req_type == PMP_ACC_WRITE);
-        // User   -> RWX check, R XOR W, R && W -> R
-        // System -> check
+        3'b110: begin // User   -> RWX check, RW -> Only read, RWX -> Only exec
+          unique case ({pmp_cfg.read, pmp_cfg.write, pmp_cfg.exec})
+            3'b110:  fault = pmp_req_type != PMP_ACC_READ;
+            3'b111:  fault = pmp_req_type != PMP_ACC_EXEC;
+            default: fault = eval_rwx(pmp_req_type, pmp_cfg);
+          endcase
+        end
+        3'b111: fault = eval_rwx(pmp_req_type, pmp_cfg); // System -> check
 
         // RESERVED
-        2'b11: result = 1'b1;
+        3'b100: fault = 1'b1;
+        3'b101: fault = 1'b1;
       endcase;
     end;
     
-    return result;
+    return fault;
   endfunction
 
   // A wrapper function in which it is decided which form of permission check function gets called
